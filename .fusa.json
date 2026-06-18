@@ -1,5 +1,6 @@
 {
   "version": "1",
+  "standard": "iso26262",
   "project": {
     "name": "rust-CAN",
     "module": "github.com/SoundMatt/rust-CAN",

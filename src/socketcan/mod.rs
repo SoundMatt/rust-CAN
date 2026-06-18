@@ -101,6 +101,7 @@ pub struct SocketCanBus {
 impl SocketCanBus {
     /// Open a SocketCAN bus on the given interface (e.g. `"vcan0"`).
     pub fn new(iface: &str) -> Result<Self, Error> {
+        //fusa:unsafe SAFETY: socket(2) is a standard POSIX call; fd is validated immediately after
         let fd = unsafe { libc::socket(PF_CAN, SOCK_RAW, CAN_RAW) };
         if fd < 0 {
             return Err(Error::Io(std::io::Error::last_os_error()));
@@ -108,10 +109,12 @@ impl SocketCanBus {
 
         // Bind to the interface.
         let iface_idx = get_iface_index(fd, iface)?;
+        //fusa:unsafe SAFETY: mem::zeroed() is valid for sockaddr_can which is a C POD type
         let mut addr: libc::sockaddr_can = unsafe { std::mem::zeroed() };
         addr.can_family = AF_CAN as u16;
         addr.can_ifindex = iface_idx;
 
+        //fusa:unsafe SAFETY: bind(2) on a valid AF_CAN socket; return value is checked immediately
         let bind_ret = unsafe {
             libc::bind(
                 fd,
@@ -120,12 +123,14 @@ impl SocketCanBus {
             )
         };
         if bind_ret < 0 {
+            //fusa:unsafe SAFETY: close(2) releases a valid fd before returning the bind error
             unsafe { libc::close(fd) };
             return Err(Error::Io(std::io::Error::last_os_error()));
         }
 
         // Enable CAN FD frames.
         let enable: libc::c_int = 1;
+        //fusa:unsafe SAFETY: setsockopt(2) enables CAN FD; failure is tolerated (fd_enabled = false)
         let fd_ret = unsafe {
             libc::setsockopt(
                 fd,
@@ -138,11 +143,13 @@ impl SocketCanBus {
         let fd_enabled = fd_ret == 0;
 
         // Set socket to non-blocking for async use.
+        //fusa:unsafe SAFETY: fcntl(2) sets O_NONBLOCK on a valid fd; both calls succeed for valid fds
         unsafe {
             let flags = libc::fcntl(fd, libc::F_GETFL);
             libc::fcntl(fd, libc::F_SETFL, flags | libc::O_NONBLOCK);
         }
 
+        //fusa:unsafe SAFETY: from_raw_fd transfers ownership of a valid, open fd created above
         let file = unsafe { std::fs::File::from_raw_fd(fd) };
         let async_fd = Arc::new(AsyncFd::new(file).map_err(Error::Io)?);
 
@@ -241,6 +248,7 @@ fn send_classic_frame(fd: RawFd, frame: &Frame) -> Result<(), Error> {
     let copy_len = frame.data.len().min(8);
     raw.data[..copy_len].copy_from_slice(&frame.data[..copy_len]);
 
+    //fusa:unsafe SAFETY: write(2) to a valid SocketCAN fd with a properly sized CanFrame buffer
     let ret = unsafe {
         libc::write(
             fd,
@@ -272,6 +280,7 @@ fn send_fd_frame(fd: RawFd, frame: &Frame) -> Result<(), Error> {
     let copy_len = frame.data.len().min(64);
     raw.data[..copy_len].copy_from_slice(&frame.data[..copy_len]);
 
+    //fusa:unsafe SAFETY: write(2) to a valid SocketCAN fd with a properly sized CanFdFrame buffer
     let ret = unsafe {
         libc::write(
             fd,
@@ -368,6 +377,7 @@ async fn reader_task(
                 __res1: 0,
                 data: [0u8; 64],
             };
+            //fusa:unsafe SAFETY: read(2) from a valid AsyncFd; WouldBlock is handled via guard
             let n = unsafe {
                 libc::read(
                     raw_fd,
@@ -407,6 +417,7 @@ async fn reader_task(
                 _res1: 0,
                 data: [0u8; 8],
             };
+            //fusa:unsafe SAFETY: read(2) from a valid AsyncFd; WouldBlock is handled via guard
             let n = unsafe {
                 libc::read(
                     raw_fd,
@@ -465,9 +476,11 @@ fn get_iface_index(fd: RawFd, name: &str) -> Result<libc::c_int, Error> {
     use std::ffi::CString;
     let cname = CString::new(name).map_err(|_| Error::Other("invalid interface name".into()))?;
 
+    //fusa:unsafe SAFETY: mem::zeroed() is valid for libc::ifreq which is a C POD type
     let mut req: libc::ifreq = unsafe { std::mem::zeroed() };
     let name_bytes = cname.as_bytes_with_nul();
     let copy_len = name_bytes.len().min(libc::IFNAMSIZ);
+    //fusa:unsafe SAFETY: copy_nonoverlapping copies name bytes into the IFNAMSIZ-bounded ifreq buffer
     unsafe {
         std::ptr::copy_nonoverlapping(
             name_bytes.as_ptr() as *const libc::c_char,
@@ -476,6 +489,7 @@ fn get_iface_index(fd: RawFd, name: &str) -> Result<libc::c_int, Error> {
         );
     }
 
+    //fusa:unsafe SAFETY: ioctl(SIOCGIFINDEX) is a standard interface index lookup; return is checked
     let ret = unsafe { libc::ioctl(fd, libc::SIOCGIFINDEX as _, &req) };
     if ret < 0 {
         return Err(Error::Io(std::io::Error::last_os_error()));

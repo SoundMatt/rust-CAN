@@ -41,8 +41,6 @@ const CAN_RAW_FD_FRAMES: libc::c_int = 5;
 const CAN_EFF_FLAG: u32 = 0x8000_0000;
 /// RTR (Remote Transmission Request) flag in can_id.
 const CAN_RTR_FLAG: u32 = 0x4000_0000;
-/// ERR (Error frame) flag in can_id.
-const CAN_ERR_FLAG: u32 = 0x2000_0000;
 /// Mask for the actual CAN ID bits.
 const CAN_SFF_MASK: u32 = 0x000_07FF;
 const CAN_EFF_MASK: u32 = 0x1FFF_FFFF;
@@ -90,9 +88,13 @@ struct CanFdFrame {
 /// a background tokio task that reads from the socket.
 pub struct SocketCanBus {
     fd: RawFd,
+    // Keeps the file and async readiness alive; read by the reader task (not via self).
+    #[allow(dead_code)]
     async_fd: Arc<AsyncFd<std::fs::File>>,
     closed: Arc<AtomicBool>,
     subscribers: Arc<Mutex<Vec<Arc<SubInner>>>>,
+    // Remembered for future send-path FD capability checks.
+    #[allow(dead_code)]
     fd_enabled: bool,
 }
 
@@ -142,7 +144,7 @@ impl SocketCanBus {
         }
 
         let file = unsafe { std::fs::File::from_raw_fd(fd) };
-        let async_fd = Arc::new(AsyncFd::new(file).map_err(|e| Error::Io(e))?);
+        let async_fd = Arc::new(AsyncFd::new(file).map_err(Error::Io)?);
 
         let closed = Arc::new(AtomicBool::new(false));
         let subscribers: Arc<Mutex<Vec<Arc<SubInner>>>> = Arc::new(Mutex::new(Vec::new()));

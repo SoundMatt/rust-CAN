@@ -362,7 +362,10 @@ mod tests {
             id: 0x800,
             ..Default::default()
         };
-        assert!(matches!(validate_frame(&f), Err(Error::InvalidFrame { .. })));
+        assert!(matches!(
+            validate_frame(&f),
+            Err(Error::InvalidFrame { .. })
+        ));
     }
 
     #[test]
@@ -372,7 +375,10 @@ mod tests {
             ext: true,
             ..Default::default()
         };
-        assert!(matches!(validate_frame(&f), Err(Error::InvalidFrame { .. })));
+        assert!(matches!(
+            validate_frame(&f),
+            Err(Error::InvalidFrame { .. })
+        ));
     }
 
     #[test]
@@ -382,7 +388,10 @@ mod tests {
             brs: true,
             ..Default::default()
         };
-        assert!(matches!(validate_frame(&f), Err(Error::InvalidFrame { .. })));
+        assert!(matches!(
+            validate_frame(&f),
+            Err(Error::InvalidFrame { .. })
+        ));
     }
 
     #[test]
@@ -393,7 +402,10 @@ mod tests {
             rtr: true,
             ..Default::default()
         };
-        assert!(matches!(validate_frame(&f), Err(Error::InvalidFrame { .. })));
+        assert!(matches!(
+            validate_frame(&f),
+            Err(Error::InvalidFrame { .. })
+        ));
     }
 
     #[test]
@@ -403,7 +415,10 @@ mod tests {
             data: vec![0u8; 9],
             ..Default::default()
         };
-        assert!(matches!(validate_frame(&f), Err(Error::InvalidFrame { .. })));
+        assert!(matches!(
+            validate_frame(&f),
+            Err(Error::InvalidFrame { .. })
+        ));
     }
 
     #[test]
@@ -414,7 +429,10 @@ mod tests {
             data: vec![0u8; 65],
             ..Default::default()
         };
-        assert!(matches!(validate_frame(&f), Err(Error::InvalidFrame { .. })));
+        assert!(matches!(
+            validate_frame(&f),
+            Err(Error::InvalidFrame { .. })
+        ));
     }
 
     #[test]
@@ -426,7 +444,10 @@ mod tests {
             data: vec![0u8; 8],
             ..Default::default()
         };
-        assert!(matches!(validate_frame(&f), Err(Error::InvalidFrame { .. })));
+        assert!(matches!(
+            validate_frame(&f),
+            Err(Error::InvalidFrame { .. })
+        ));
     }
 
     #[test]
@@ -438,7 +459,10 @@ mod tests {
             data: vec![0u8; 8],
             ..Default::default()
         };
-        assert!(matches!(validate_frame(&f), Err(Error::InvalidFrame { .. })));
+        assert!(matches!(
+            validate_frame(&f),
+            Err(Error::InvalidFrame { .. })
+        ));
     }
 
     #[test]
@@ -449,7 +473,10 @@ mod tests {
             data: vec![0u8; 8],
             ..Default::default()
         };
-        assert!(matches!(validate_frame(&f), Err(Error::InvalidFrame { .. })));
+        assert!(matches!(
+            validate_frame(&f),
+            Err(Error::InvalidFrame { .. })
+        ));
     }
 
     #[test]
@@ -459,7 +486,10 @@ mod tests {
             esi: true,
             ..Default::default()
         };
-        assert!(matches!(validate_frame(&f), Err(Error::InvalidFrame { .. })));
+        assert!(matches!(
+            validate_frame(&f),
+            Err(Error::InvalidFrame { .. })
+        ));
     }
 
     #[test]
@@ -468,8 +498,14 @@ mod tests {
             id: 0x100,
             ..Default::default()
         };
-        let pass = Filter { id: 0x100, mask: 0x7FF };
-        let miss = Filter { id: 0x200, mask: 0x7FF };
+        let pass = Filter {
+            id: 0x100,
+            mask: 0x7FF,
+        };
+        let miss = Filter {
+            id: 0x200,
+            mask: 0x7FF,
+        };
         let all = Filter { id: 0, mask: 0 };
 
         assert!(pass.matches(&f));
@@ -482,10 +518,16 @@ mod tests {
         let classic = Frame::default();
         assert_eq!(classic.max_data_len(), 8);
 
-        let fd = Frame { fd: true, ..Default::default() };
+        let fd = Frame {
+            fd: true,
+            ..Default::default()
+        };
         assert_eq!(fd.max_data_len(), 64);
 
-        let xl = Frame { xl: true, ..Default::default() };
+        let xl = Frame {
+            xl: true,
+            ..Default::default()
+        };
         assert_eq!(xl.max_data_len(), 2048);
     }
 

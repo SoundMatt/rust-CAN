@@ -212,7 +212,7 @@ impl Context {
 
     /// Returns true if the deadline has passed.
     pub fn done(&self) -> bool {
-        self.deadline.map_or(false, |d| Instant::now() >= d)
+        self.deadline.is_some_and(|d| Instant::now() >= d)
     }
 }
 
@@ -302,10 +302,7 @@ pub trait Node: Send + Sync {
 
     async fn send(&self, ctx: Context, msg: Message) -> Result<(), Error>;
 
-    async fn subscribe(
-        &self,
-        opts: SubscriberOptions,
-    ) -> Result<mpsc::Receiver<Message>, Error>;
+    async fn subscribe(&self, opts: SubscriberOptions) -> Result<mpsc::Receiver<Message>, Error>;
 
     async fn close(&self) -> Result<(), Error>;
 }

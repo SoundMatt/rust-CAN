@@ -290,9 +290,9 @@ fn parse_signal_line(line: &str) -> Result<DbcSignal, Error> {
     };
 
     // Parse: "<unit>"
-    let unit = if rest.starts_with('"') {
-        let end_quote = rest[1..].find('"').map(|p| p + 1).unwrap_or(rest.len() - 1);
-        rest[1..end_quote].to_string()
+    let unit = if let Some(rest_inner) = rest.strip_prefix('"') {
+        let end_quote = rest_inner.find('"').unwrap_or(rest_inner.len());
+        rest_inner[..end_quote].to_string()
     } else {
         String::new()
     };
@@ -318,9 +318,14 @@ fn parse_signal_line(line: &str) -> Result<DbcSignal, Error> {
 /// Decode a signal's physical value from raw frame bytes.
 //fusa:req REQ-DBC-002
 pub fn decode_signal(sig: &DbcSignal, data: &[u8]) -> f64 {
-    let raw = extract_raw(data, sig.start_bit as usize, sig.length as usize, sig.byte_order);
+    let raw = extract_raw(
+        data,
+        sig.start_bit as usize,
+        sig.length as usize,
+        sig.byte_order,
+    );
 
-    let phys = match sig.value_type {
+    match sig.value_type {
         ValueType::Unsigned => raw as f64 * sig.factor + sig.offset,
         ValueType::Signed => {
             // Two's complement sign extension.
@@ -333,9 +338,7 @@ pub fn decode_signal(sig: &DbcSignal, data: &[u8]) -> f64 {
             };
             signed as f64 * sig.factor + sig.offset
         }
-    };
-
-    phys
+    }
 }
 
 /// Extract a raw unsigned integer from `data` at `start_bit` with `length` bits.
@@ -394,7 +397,7 @@ BO_ 512 TransmissionData: 4 TCU
  SG_ GearPosition : 0|4@1+ (1,0) [0|15] "" Vector__XXX
 "#;
 
-    //fusa:req REQ-DBC-001
+    //fusa:test REQ-DBC-001
     #[test]
     fn parse_messages() {
         let db = parse(SAMPLE_DBC).unwrap();
@@ -410,7 +413,7 @@ BO_ 512 TransmissionData: 4 TCU
         assert_eq!(trans.signals.len(), 1);
     }
 
-    //fusa:req REQ-DBC-002
+    //fusa:test REQ-DBC-002
     #[test]
     fn decode_unsigned_signal() {
         let db = parse(SAMPLE_DBC).unwrap();

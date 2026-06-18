@@ -1,13 +1,18 @@
 {
-  "configVersion": "1.0",
+  "version": "1",
+  "standard": "iso26262",
   "project": {
     "name": "rust-CAN",
-    "version": "0.1.0"
+    "module": "github.com/SoundMatt/rust-CAN",
+    "standard": "iso26262",
+    "asil": "ASIL-B"
   },
-  "standard": "iso26262",
-  "asilLevel": "ASIL-B",
-  "sourceDirs": ["src"],
-  "requirementsFile": "requirements.json",
-  "excludePatterns": ["target/**", "**/*.md"],
-  "strict": true
+  "rules": {
+    "exclude": [],
+    "severity": {}
+  },
+  "report": {
+    "format": "json",
+    "output": "check-report.json"
+  }
 }

@@ -167,11 +167,7 @@ impl Receiver {
             return Err(E2EError {
                 kind: E2EErrorKind::HeaderTooShort,
                 counter: 0,
-                message: format!(
-                    "need {} bytes, got {}",
-                    HEADER_SIZE,
-                    data.len()
-                ),
+                message: format!("need {} bytes, got {}", HEADER_SIZE, data.len()),
             });
         }
 
@@ -267,7 +263,7 @@ mod tests {
         (Protector::new(cfg), Receiver::new(cfg))
     }
 
-    //fusa:req REQ-SAFETY-001
+    //fusa:test REQ-SAFETY-001
     #[test]
     fn header_prepended() {
         let (p, _r) = make_pair();
@@ -278,7 +274,7 @@ mod tests {
         assert_eq!(&protected[HEADER_SIZE..], payload);
     }
 
-    //fusa:req REQ-SAFETY-002, REQ-SAFETY-003, REQ-SAFETY-004
+    //fusa:test REQ-SAFETY-002, REQ-SAFETY-003, REQ-SAFETY-004
     #[test]
     fn protect_and_unwrap() {
         let (p, r) = make_pair();
@@ -288,7 +284,7 @@ mod tests {
         assert_eq!(recovered, payload);
     }
 
-    //fusa:req REQ-SAFETY-003
+    //fusa:test REQ-SAFETY-003
     #[test]
     fn sequence_counter_increments() {
         let (p, r) = make_pair();
@@ -301,7 +297,7 @@ mod tests {
         r.unwrap(&p3).unwrap();
     }
 
-    //fusa:req REQ-SAFETY-004
+    //fusa:test REQ-SAFETY-004
     #[test]
     fn crc_mismatch_detected() {
         let (p, r) = make_pair();
@@ -312,7 +308,7 @@ mod tests {
         assert_eq!(err.kind, E2EErrorKind::CrcMismatch);
     }
 
-    //fusa:req REQ-SAFETY-005
+    //fusa:test REQ-SAFETY-005
     #[test]
     fn sequence_gap_detected() {
         let (p, r) = make_pair();
@@ -327,7 +323,7 @@ mod tests {
         assert_eq!(err.kind, E2EErrorKind::SequenceGap);
     }
 
-    //fusa:req REQ-SAFETY-006
+    //fusa:test REQ-SAFETY-006
     #[test]
     fn header_too_short_detected() {
         let (_p, r) = make_pair();

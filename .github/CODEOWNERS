@@ -1,0 +1,24 @@
+# CODEOWNERS for rust-CAN
+# Requires review from the appropriate owner before merging.
+# Format: <pattern> <owner>
+
+# Default owner — all files
+*                   @SoundMatt
+
+# Safety-critical source (ASIL-B) — requires safety review
+/src/safety/        @SoundMatt
+/src/frame.rs       @SoundMatt
+/src/bus.rs         @SoundMatt
+/src/socketcan/     @SoundMatt
+
+# Safety artifacts — must not change without sign-off
+/.fusa.json         @SoundMatt
+/.fusa-reqs.json    @SoundMatt
+/.fusa-hara.json    @SoundMatt
+/fmea.json          @SoundMatt
+/tara.json          @SoundMatt
+/safety-case.json   @SoundMatt
+/SAFETY_PLAN.md     @SoundMatt
+
+# CI pipeline — changes require maintainer review
+/.github/workflows/ @SoundMatt

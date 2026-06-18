@@ -136,8 +136,12 @@ mod tests {
     #[tokio::test]
     async fn records_sent_frames() {
         let bus = MockBus::new();
-        bus.send(Context::background(), make_frame(0x100)).await.unwrap();
-        bus.send(Context::background(), make_frame(0x200)).await.unwrap();
+        bus.send(Context::background(), make_frame(0x100))
+            .await
+            .unwrap();
+        bus.send(Context::background(), make_frame(0x200))
+            .await
+            .unwrap();
         let sent = bus.sent_frames().await;
         assert_eq!(sent.len(), 2);
         assert_eq!(sent[0].id, 0x100);
@@ -147,7 +151,9 @@ mod tests {
     #[tokio::test]
     async fn reset_clears_sent() {
         let bus = MockBus::new();
-        bus.send(Context::background(), make_frame(0x100)).await.unwrap();
+        bus.send(Context::background(), make_frame(0x100))
+            .await
+            .unwrap();
         bus.reset().await;
         assert!(bus.sent_frames().await.is_empty());
     }

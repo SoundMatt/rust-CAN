@@ -1,0 +1,46 @@
+{
+  "standard": "ISO 26262",
+  "asilLevel": "ASIL-B",
+  "version": "0.1.0",
+  "date": "2026-06-18",
+  "safetyGoals": [
+    {
+      "id": "SG-CAN-01",
+      "description": "The rust-CAN library shall not transmit or accept malformed CAN frames that could disrupt bus communication or corrupt application data.",
+      "asil": "ASIL-B"
+    }
+  ],
+  "hazards": [
+    {"id": "H-CAN-01", "hazard": "Malformed frame accepted and transmitted", "severity": "S2", "exposure": "E3", "controllability": "C2", "asil": "ASIL-B"},
+    {"id": "H-CAN-02", "hazard": "Safety-critical payload corrupted without detection", "severity": "S3", "exposure": "E2", "controllability": "C2", "asil": "ASIL-B"},
+    {"id": "H-CAN-03", "hazard": "Frame replay attack accepted as authentic", "severity": "S3", "exposure": "E2", "controllability": "C2", "asil": "ASIL-B"},
+    {"id": "H-CAN-04", "hazard": "Subscriber channel overflow causing silent frame loss", "severity": "S1", "exposure": "E4", "controllability": "C3", "asil": "QM"},
+    {"id": "H-CAN-05", "hazard": "Application blocked indefinitely on ISO-TP timeout", "severity": "S2", "exposure": "E2", "controllability": "C1", "asil": "ASIL-A"}
+  ],
+  "requirements": [
+    {"id": "REQ-CAN-004", "impl": "src/frame.rs", "test": "test validate_frame_*", "status": "covered"},
+    {"id": "REQ-CAN-008", "impl": "src/virtual_bus/mod.rs", "test": "test close_is_idempotent", "status": "covered"},
+    {"id": "REQ-CAN-009", "impl": "src/frame.rs", "test": "test validate_frame_standard_id_boundary", "status": "covered"},
+    {"id": "REQ-CAN-010", "impl": "src/frame.rs", "test": "test validate_frame_extended_id_boundary", "status": "covered"},
+    {"id": "REQ-CAN-011", "impl": "src/frame.rs", "test": "test validate_frame_brs_requires_fd", "status": "covered"},
+    {"id": "REQ-CAN-012", "impl": "src/frame.rs", "test": "test validate_frame_rtr_fd_exclusive", "status": "covered"},
+    {"id": "REQ-CAN-013", "impl": "src/frame.rs", "test": "test validate_frame_data_length", "status": "covered"},
+    {"id": "REQ-CAN-014", "impl": "src/frame.rs", "test": "test validate_frame_fd_xl_mutual_exclusion", "status": "covered"},
+    {"id": "REQ-SAFETY-002", "impl": "src/safety/mod.rs", "test": "test safety_protect_unwrap_roundtrip", "status": "covered"},
+    {"id": "REQ-SAFETY-003", "impl": "src/safety/mod.rs", "test": "test safety_sequence_counter_increments", "status": "covered"},
+    {"id": "REQ-SAFETY-004", "impl": "src/safety/mod.rs", "test": "test safety_crc_mismatch_detected", "status": "covered"},
+    {"id": "REQ-SAFETY-005", "impl": "src/safety/mod.rs", "test": "test safety_sequence_gap_detected", "status": "covered"},
+    {"id": "REQ-ISOTP-005", "impl": "src/isotp/mod.rs", "test": "test isotp_timeout_respected", "status": "covered"}
+  ],
+  "complete": false,
+  "evidence": [
+    {"file": "check-report.json", "description": "Safety check report", "required": true, "status": "generated-in-ci"},
+    {"file": "trace.json", "description": "Requirement traceability matrix", "required": true, "status": "generated-in-ci"},
+    {"file": "fmea.json", "description": "FMEA", "required": false, "status": "present"},
+    {"file": "tara.json", "description": "Threat analysis", "required": false, "status": "present"},
+    {"file": "qualify-report.json", "description": "Tool qualification", "required": true, "status": "generated-in-ci"},
+    {"file": "sbom.json", "description": "Software Bill of Materials", "required": true, "status": "generated-in-ci"},
+    {"file": "comp-report.json", "description": "Complexity analysis V(G)", "required": false, "status": "generated-in-ci"},
+    {"file": "cyber-report.json", "description": "Cybersecurity (TARA/CWE) analysis", "required": false, "status": "generated-in-ci"}
+  ]
+}

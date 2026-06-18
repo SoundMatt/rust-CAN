@@ -1,0 +1,13 @@
+{
+  "configVersion": "1.0",
+  "project": {
+    "name": "rust-CAN",
+    "version": "0.1.0"
+  },
+  "standard": "iso26262",
+  "asilLevel": "ASIL-B",
+  "sourceDirs": ["src"],
+  "requirementsFile": "requirements.json",
+  "excludePatterns": ["target/**", "**/*.md"],
+  "strict": true
+}

@@ -1,0 +1,219 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  # ── Core build & test ──────────────────────────────────────────────────────
+  build-test:
+    name: build & test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: fmt
+        run: cargo fmt --check
+
+      - name: clippy
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: test
+        run: cargo test --locked
+
+      - name: build release binary
+        run: cargo build --release --bin rust-can --locked
+
+      - name: smoke test CLI
+        run: |
+          ./target/release/rust-can version --format json | python3 -c "
+          import json, sys
+          d = json.load(sys.stdin)
+          assert d['tool'] == 'rust-can', f'bad tool: {d}'
+          assert d['protocol'] == 'CAN', f'bad protocol: {d}'
+          assert d['spec_version'] == '1.1', f'bad spec_version: {d}'
+          print('version JSON OK')
+          "
+          ./target/release/rust-can capabilities | python3 -c "
+          import json, sys
+          d = json.load(sys.stdin)
+          assert d['kind'] == 'capabilities', f'bad kind: {d}'
+          assert d['adapt'] == True, f'adapt must be true: {d}'
+          print('capabilities JSON OK')
+          "
+          ./target/release/rust-can status --format json | python3 -c "
+          import json, sys
+          d = json.load(sys.stdin)
+          assert d['protocol'] == 'CAN', f'bad protocol: {d}'
+          print('status JSON OK')
+          "
+
+  # ── ASIL-B safety checks via rust-FuSa ────────────────────────────────────
+  safety:
+    name: ASIL-B safety (rust-FuSa)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ubuntu-cargo-safety-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Install rsfusa
+        run: cargo install --git https://github.com/SoundMatt/rust-FuSa rsfusa --locked
+
+      - name: Build release binary (needed for qualify)
+        run: cargo build --release --locked
+
+      - name: Run cargo tests and capture evidence
+        run: rsfusa verify --dir .
+
+      - name: Coding standard lint (ISO 26262 Part 6)
+        run: rsfusa lint --dir . --format json --output lint-report.json
+
+      - name: Static analysis
+        run: rsfusa analyze --dir . --format json --output analyze-report.json
+
+      - name: Safety check (ASIL-B strict — exit 1 on ERROR)
+        run: rsfusa check --dir . --strict --format json --output check-report.json
+
+      - name: Safety check SARIF (GitHub code scanning)
+        run: rsfusa check --dir . --format sarif --output results.sarif || true
+
+      - name: Cyclomatic complexity V(G)
+        run: rsfusa comp --dir . --format json --output comp-report.json
+
+      - name: Requirement traceability matrix
+        run: |
+          rsfusa trace --dir . --format json --output trace.json
+          rsfusa trace --dir . --format text
+
+      - name: FMEA
+        run: rsfusa fmea --dir . || true
+
+      - name: Threat analysis (TARA)
+        run: rsfusa tara --dir . || true
+
+      - name: Cybersecurity analysis (CWE)
+        run: rsfusa cyber --dir . --format json --output cyber-report.json || true
+
+      - name: Boundary diagram
+        run: rsfusa boundary --dir . || true
+
+      - name: HARA
+        run: rsfusa hara show --dir . || true
+
+      - name: Safety case assembly
+        run: rsfusa safety-case --dir . || true
+
+      - name: ISO 26262 Part 6 gap report
+        run: rsfusa iso26262 --dir . --format json --output iso26262-gap-report.json || true
+
+      - name: Tool qualification
+        run: rsfusa qualify
+
+      - name: Release artifacts (SBOM, provenance, manifest)
+        run: rsfusa release --dir .
+
+      - name: Audit pack
+        run: rsfusa audit-pack --output audit-pack.zip || true
+
+      - name: Upload SARIF to GitHub Code Scanning
+        if: always() && github.event_name != 'pull_request'
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: results.sarif
+        continue-on-error: true
+
+      - name: Upload safety evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: safety-evidence
+          path: |
+            check-report.json
+            lint-report.json
+            analyze-report.json
+            comp-report.json
+            cyber-report.json
+            trace.json
+            fmea.json
+            tara.json
+            safety-case.json
+            safety-case.md
+            iso26262-gap-report.json
+            qualify-report.json
+            sbom.json
+            provenance.json
+            artifact-manifest.json
+            audit-pack.zip
+          if-no-files-found: warn
+
+  # ── DCO sign-off check ─────────────────────────────────────────────────────
+  dco:
+    name: DCO
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Check DCO sign-off on all PR commits
+        run: |
+          git log --format="%H" ${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }} | while read -r sha; do
+            body=$(git log -1 --format="%B" "$sha")
+            if ! echo "$body" | grep -qE "^Signed-off-by: .+ <.+@.+>"; then
+              echo "FAIL: commit $sha is missing a Signed-off-by line"
+              exit 1
+            fi
+          done
+          echo "DCO check passed"
+
+  # ── Cross-compile ──────────────────────────────────────────────────────────
+  cross-compile:
+    name: cross-compile (${{ matrix.target }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        target:
+          - aarch64-unknown-linux-musl
+          - x86_64-unknown-linux-musl
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - name: Install cross
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cross
+      - name: Build
+        run: cross build --release --bin rust-can --target ${{ matrix.target }} --locked

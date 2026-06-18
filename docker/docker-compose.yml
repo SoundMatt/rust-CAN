@@ -1,0 +1,18 @@
+version: "3.9"
+
+services:
+  rust-can:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    image: ghcr.io/soundmatt/rust-can:latest
+    volumes:
+      - .:/project
+    command: ["version", "--format", "json"]
+
+  rust-can-capabilities:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    image: ghcr.io/soundmatt/rust-can:latest
+    command: ["capabilities"]

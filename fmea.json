@@ -1,0 +1,104 @@
+{
+  "asilLevel": "ASIL-B",
+  "entries": [
+    {
+      "module": "src/frame.rs",
+      "function": "validate_frame",
+      "failureMode": "Accepts a frame with out-of-range CAN ID",
+      "effect": "Malformed frame transmitted on bus; downstream nodes may interpret corrupt arbitration",
+      "severity": "S2",
+      "risk": "MEDIUM",
+      "detectionMethod": "Unit tests REQ-CAN-009, REQ-CAN-010; static analysis"
+    },
+    {
+      "module": "src/frame.rs",
+      "function": "validate_frame",
+      "failureMode": "Accepts frame with BRS=true and FD=false",
+      "effect": "Bit-rate switch flag ignored by hardware; potential bus disruption",
+      "severity": "S2",
+      "risk": "MEDIUM",
+      "detectionMethod": "Unit test REQ-CAN-011"
+    },
+    {
+      "module": "src/frame.rs",
+      "function": "validate_frame",
+      "failureMode": "Accepts RTR+FD frame combination",
+      "effect": "Protocol violation; undefined hardware behaviour",
+      "severity": "S2",
+      "risk": "MEDIUM",
+      "detectionMethod": "Unit test REQ-CAN-012"
+    },
+    {
+      "module": "src/virtual_bus/mod.rs",
+      "function": "VirtualBus::send",
+      "failureMode": "Frame delivered after bus close",
+      "effect": "Subscriber receives stale frame after teardown",
+      "severity": "S1",
+      "risk": "LOW",
+      "detectionMethod": "Lifecycle unit tests REQ-CAN-008; closed flag checked before send"
+    },
+    {
+      "module": "src/virtual_bus/mod.rs",
+      "function": "VirtualBus::subscribe",
+      "failureMode": "Subscriber channel overflows and drops frames silently",
+      "effect": "Application loses CAN frames without notification",
+      "severity": "S2",
+      "risk": "MEDIUM",
+      "detectionMethod": "Back-pressure policy documented; MetricsProvider exposes drop_count (REQ-VIRT-005)"
+    },
+    {
+      "module": "src/safety/mod.rs",
+      "function": "Protector::protect",
+      "failureMode": "Incorrect CRC-16 computed",
+      "effect": "Corrupted payload accepted by Receiver; silent data corruption",
+      "severity": "S3",
+      "risk": "HIGH",
+      "detectionMethod": "CRC roundtrip unit tests REQ-SAFETY-002, REQ-SAFETY-004"
+    },
+    {
+      "module": "src/safety/mod.rs",
+      "function": "Receiver::unwrap",
+      "failureMode": "Sequence gap not detected",
+      "effect": "Replayed or out-of-order message accepted",
+      "severity": "S3",
+      "risk": "HIGH",
+      "detectionMethod": "Sequence counter unit tests REQ-SAFETY-005"
+    },
+    {
+      "module": "src/isotp/mod.rs",
+      "function": "IsoTpConn::send",
+      "failureMode": "Multi-frame message segmented incorrectly",
+      "effect": "Receiver reassembles corrupt payload",
+      "severity": "S2",
+      "risk": "MEDIUM",
+      "detectionMethod": "ISO-TP roundtrip unit tests REQ-ISOTP-001, REQ-ISOTP-002"
+    },
+    {
+      "module": "src/isotp/mod.rs",
+      "function": "IsoTpConn::recv",
+      "failureMode": "Timeout not enforced on missing consecutive frame",
+      "effect": "Application blocks indefinitely",
+      "severity": "S2",
+      "risk": "MEDIUM",
+      "detectionMethod": "Timeout unit test REQ-ISOTP-005"
+    },
+    {
+      "module": "src/j1939/mod.rs",
+      "function": "decode_id",
+      "failureMode": "Incorrect PGN extracted from 29-bit ID",
+      "effect": "J1939 message routed to wrong handler",
+      "severity": "S2",
+      "risk": "MEDIUM",
+      "detectionMethod": "PGN decode unit tests REQ-J1939-001, REQ-J1939-002, REQ-J1939-003"
+    },
+    {
+      "module": "src/adapt.rs",
+      "function": "from_message",
+      "failureMode": "Invalid relay::Message ID accepted as CAN frame ID",
+      "effect": "Malformed frame constructed and sent on bus",
+      "severity": "S2",
+      "risk": "MEDIUM",
+      "detectionMethod": "ToMessage/FromMessage roundtrip tests REQ-CAN-007"
+    }
+  ]
+}

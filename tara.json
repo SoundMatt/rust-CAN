@@ -1,0 +1,58 @@
+{
+  "entries": [
+    {
+      "category": "integrity",
+      "stride": "T",
+      "threat": "Attacker injects malformed CAN frames via SocketCAN interface to cause buffer overread",
+      "cwe": "CWE-125",
+      "riskRating": "HIGH",
+      "mitigation": "validate_frame called before every send; data length bounded by CAN_XL_MAX_DATA_LEN=2048",
+      "sourceRule": "CYBER003"
+    },
+    {
+      "category": "integrity",
+      "stride": "T",
+      "threat": "Attacker replays captured safety-critical E2E-protected messages",
+      "cwe": "CWE-294",
+      "riskRating": "HIGH",
+      "mitigation": "E2E sequence counter (REQ-SAFETY-003) and gap detection (REQ-SAFETY-005) prevent replay",
+      "sourceRule": "CYBER004"
+    },
+    {
+      "category": "integrity",
+      "stride": "T",
+      "threat": "Silent data corruption in CAN payload undetected by upper layer",
+      "cwe": "CWE-354",
+      "riskRating": "HIGH",
+      "mitigation": "CRC-16/CCITT-FALSE E2E header (REQ-SAFETY-002) detects single and burst errors",
+      "sourceRule": "CYBER005"
+    },
+    {
+      "category": "availability",
+      "stride": "D",
+      "threat": "Bus flooding: high-frequency sends saturate subscriber channels causing frame loss",
+      "cwe": "CWE-400",
+      "riskRating": "MEDIUM",
+      "mitigation": "Back-pressure policy (REQ-VIRT-005) and drop_count MetricsProvider field for monitoring",
+      "sourceRule": "CYBER006"
+    },
+    {
+      "category": "availability",
+      "stride": "D",
+      "threat": "ISO-TP DoS: attacker sends First Frame but no Consecutive Frames, blocking Recv indefinitely",
+      "cwe": "CWE-400",
+      "riskRating": "MEDIUM",
+      "mitigation": "Context-based timeout (REQ-ISOTP-005) bounds all blocking receive operations",
+      "sourceRule": "CYBER007"
+    },
+    {
+      "category": "integrity",
+      "stride": "S",
+      "threat": "Spoofed CAN frame with forged source address on J1939 bus",
+      "cwe": "CWE-290",
+      "riskRating": "MEDIUM",
+      "mitigation": "Application layer must use E2E protection (safety module) for authenticated payloads; J1939 source address is informational only",
+      "sourceRule": "CYBER008"
+    }
+  ]
+}

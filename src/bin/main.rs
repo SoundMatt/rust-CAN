@@ -111,12 +111,18 @@ async fn run(cli: Cli) -> Result<i32, Box<dyn std::error::Error>> {
         Commands::Version { format } => cmd_version(format),
         Commands::Capabilities => cmd_capabilities(),
         Commands::Status { format } => cmd_status(format),
-        Commands::Send { iface, id, data, fd, ext } => {
-            cmd_send(iface, id, data, fd, ext).await
-        }
-        Commands::Subscribe { iface, count, format } => {
-            cmd_subscribe(iface, count, format).await
-        }
+        Commands::Send {
+            iface,
+            id,
+            data,
+            fd,
+            ext,
+        } => cmd_send(iface, id, data, fd, ext).await,
+        Commands::Subscribe {
+            iface,
+            count,
+            format,
+        } => cmd_subscribe(iface, count, format).await,
     }
 }
 
@@ -142,7 +148,10 @@ fn cmd_version(format: OutputFormat) -> Result<i32, Box<dyn std::error::Error>> 
             println!("tool:         {}", doc["tool"].as_str().unwrap_or(""));
             println!("protocol:     {}", doc["protocol"].as_str().unwrap_or(""));
             println!("version:      {}", doc["version"].as_str().unwrap_or(""));
-            println!("spec_version: {}", doc["spec_version"].as_str().unwrap_or(""));
+            println!(
+                "spec_version: {}",
+                doc["spec_version"].as_str().unwrap_or("")
+            );
             println!("language:     {}", doc["language"].as_str().unwrap_or(""));
             println!("runtime:      {}", doc["runtime"].as_str().unwrap_or(""));
         }
@@ -160,9 +169,13 @@ fn cmd_capabilities() -> Result<i32, Box<dyn std::error::Error>> {
     // Transports: virtual always present; socketcan only on Linux.
     let transports = {
         #[cfg(target_os = "linux")]
-        { vec!["virtual", "socketcan"] }
+        {
+            vec!["virtual", "socketcan"]
+        }
         #[cfg(not(target_os = "linux"))]
-        { vec!["virtual"] }
+        {
+            vec!["virtual"]
+        }
     };
 
     let doc = json!({
@@ -273,9 +286,7 @@ async fn cmd_subscribe(
     format: OutputFormat,
 ) -> Result<i32, Box<dyn std::error::Error>> {
     let bus = Arc::new(VirtualBus::new());
-    let rx = bus
-        .subscribe(vec![], SubscriberOptions::default())
-        .await?;
+    let rx = bus.subscribe(vec![], SubscriberOptions::default()).await?;
 
     eprintln!(
         "rust-can: subscribing on virtual bus ({})",

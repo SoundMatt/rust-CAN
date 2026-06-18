@@ -318,7 +318,12 @@ fn parse_signal_line(line: &str) -> Result<DbcSignal, Error> {
 /// Decode a signal's physical value from raw frame bytes.
 //fusa:req REQ-DBC-002
 pub fn decode_signal(sig: &DbcSignal, data: &[u8]) -> f64 {
-    let raw = extract_raw(data, sig.start_bit as usize, sig.length as usize, sig.byte_order);
+    let raw = extract_raw(
+        data,
+        sig.start_bit as usize,
+        sig.length as usize,
+        sig.byte_order,
+    );
 
     let phys = match sig.value_type {
         ValueType::Unsigned => raw as f64 * sig.factor + sig.offset,

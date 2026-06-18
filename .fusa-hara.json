@@ -1,0 +1,104 @@
+{
+  "project": "rust-CAN",
+  "standard": "ISO 26262",
+  "createdAt": "2026-06-18T00:00:00Z",
+  "operationalSituations": [
+    {
+      "id": "OS-001",
+      "description": "Normal operation — CAN bus active, frames being sent and received"
+    },
+    {
+      "id": "OS-002",
+      "description": "Bus initialisation — connection being established"
+    },
+    {
+      "id": "OS-003",
+      "description": "Bus shutdown — close() called, subscribers draining"
+    }
+  ],
+  "hazards": [
+    {
+      "id": "H-CAN-01",
+      "description": "Malformed CAN frame transmitted to the bus (invalid ID, bad DLC, protocol constraint violated)",
+      "situations": ["OS-001"],
+      "risk": {
+        "severity": "S2",
+        "exposure": "E3",
+        "controllability": "C2",
+        "asil": "ASIL-B"
+      },
+      "safetyGoals": ["SG-CAN-01"]
+    },
+    {
+      "id": "H-CAN-02",
+      "description": "Safety-critical payload silently corrupted — corruption not detected by the E2E layer",
+      "situations": ["OS-001"],
+      "risk": {
+        "severity": "S3",
+        "exposure": "E2",
+        "controllability": "C2",
+        "asil": "ASIL-B"
+      },
+      "safetyGoals": ["SG-CAN-02"]
+    },
+    {
+      "id": "H-CAN-03",
+      "description": "Replayed or out-of-order E2E-protected message accepted as authentic",
+      "situations": ["OS-001"],
+      "risk": {
+        "severity": "S3",
+        "exposure": "E2",
+        "controllability": "C2",
+        "asil": "ASIL-B"
+      },
+      "safetyGoals": ["SG-CAN-02"]
+    },
+    {
+      "id": "H-CAN-04",
+      "description": "Subscriber channel overflow — frames silently dropped without application awareness",
+      "situations": ["OS-001"],
+      "risk": {
+        "severity": "S1",
+        "exposure": "E4",
+        "controllability": "C3",
+        "asil": "QM"
+      },
+      "safetyGoals": []
+    },
+    {
+      "id": "H-CAN-05",
+      "description": "ISO-TP receive blocks indefinitely when consecutive frames do not arrive",
+      "situations": ["OS-001"],
+      "risk": {
+        "severity": "S2",
+        "exposure": "E2",
+        "controllability": "C1",
+        "asil": "ASIL-A"
+      },
+      "safetyGoals": ["SG-CAN-03"]
+    }
+  ],
+  "safetyGoals": [
+    {
+      "id": "SG-CAN-01",
+      "description": "rust-CAN shall reject all frames that violate CAN protocol constraints before transmission",
+      "hazards": ["H-CAN-01"],
+      "asil": "ASIL-B",
+      "safeState": "Frame is rejected with InvalidFrame error; no transmission occurs"
+    },
+    {
+      "id": "SG-CAN-02",
+      "description": "rust-CAN E2E protection shall detect payload corruption and replay attacks",
+      "hazards": ["H-CAN-02", "H-CAN-03"],
+      "asil": "ASIL-B",
+      "safeState": "Corrupted or replayed data is rejected with E2EError; payload is not forwarded to application"
+    },
+    {
+      "id": "SG-CAN-03",
+      "description": "rust-CAN shall bound all blocking receive operations by the caller-supplied context deadline",
+      "hazards": ["H-CAN-05"],
+      "asil": "ASIL-A",
+      "safeState": "Timeout returns ErrTimeout; caller can retry or escalate"
+    }
+  ]
+}

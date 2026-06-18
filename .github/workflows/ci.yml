@@ -93,7 +93,10 @@ jobs:
       - name: Build release binary (needed for qualify)
         run: cargo build --release --locked
 
-      - name: Run cargo tests and capture evidence
+      - name: Run cargo tests (unit + integration)
+        run: cargo test --locked
+
+      - name: Capture test evidence with rsfusa
         run: rsfusa verify --dir .
 
       - name: Coding standard lint (ISO 26262 Part 6)

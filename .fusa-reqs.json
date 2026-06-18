@@ -1,0 +1,271 @@
+{
+  "schemaVersion": "1.0",
+  "requirements": [
+    {
+      "id": "REQ-CAN-001",
+      "title": "Frame type",
+      "text": "The system shall define a CAN frame type carrying ID, flags (Ext, RTR, FD, BRS, ESI, XL), and data payload.",
+      "standard": "iso26262",
+      "level": "HLR"
+    },
+    {
+      "id": "REQ-CAN-002",
+      "title": "Filter type",
+      "text": "The system shall define a Filter type for masked ID comparison.",
+      "standard": "iso26262",
+      "level": "HLR"
+    },
+    {
+      "id": "REQ-CAN-003",
+      "title": "Bus interface",
+      "text": "The system shall expose a Bus trait with Send, Subscribe, and Close methods.",
+      "standard": "iso26262",
+      "level": "HLR"
+    },
+    {
+      "id": "REQ-CAN-004",
+      "title": "Frame validation",
+      "text": "The system shall validate CAN frames per RELAY spec §15.1 constraints.",
+      "standard": "iso26262",
+      "level": "HLR"
+    },
+    {
+      "id": "REQ-CAN-005",
+      "title": "Error sentinels",
+      "text": "The system shall expose Closed, NotConnected, Timeout, and PayloadTooLarge error variants.",
+      "standard": "iso26262",
+      "level": "HLR"
+    },
+    {
+      "id": "REQ-CAN-006",
+      "title": "Concurrent safety",
+      "text": "The Bus trait implementation shall be safe to call from multiple async tasks concurrently.",
+      "standard": "iso26262",
+      "level": "HLR"
+    },
+    {
+      "id": "REQ-CAN-007",
+      "title": "RELAY adapter",
+      "text": "The system shall expose adapt(), to_message(), and from_message() for RELAY protocol interoperability.",
+      "standard": "iso26262",
+      "level": "HLR"
+    },
+    {
+      "id": "REQ-CAN-008",
+      "title": "Lifecycle",
+      "text": "Close shall be idempotent; send/subscribe after close shall return Closed error.",
+      "standard": "iso26262",
+      "level": "HLR"
+    },
+    {
+      "id": "REQ-CAN-009",
+      "title": "Standard ID range",
+      "text": "ValidateFrame shall reject standard IDs exceeding 0x7FF.",
+      "standard": "iso26262",
+      "level": "HLR"
+    },
+    {
+      "id": "REQ-CAN-010",
+      "title": "Extended ID range",
+      "text": "ValidateFrame shall reject extended IDs exceeding 0x1FFFFFFF.",
+      "standard": "iso26262",
+      "level": "HLR"
+    },
+    {
+      "id": "REQ-CAN-011",
+      "title": "BRS/FD constraint",
+      "text": "ValidateFrame shall reject frames with BRS=true and FD=false.",
+      "standard": "iso26262",
+      "level": "HLR"
+    },
+    {
+      "id": "REQ-CAN-012",
+      "title": "RTR/FD constraint",
+      "text": "ValidateFrame shall reject frames with RTR=true and FD=true.",
+      "standard": "iso26262",
+      "level": "HLR"
+    },
+    {
+      "id": "REQ-CAN-013",
+      "title": "Data length constraint",
+      "text": "ValidateFrame shall reject data payloads exceeding the frame format maximum (8/64/2048).",
+      "standard": "iso26262",
+      "level": "HLR"
+    },
+    {
+      "id": "REQ-CAN-014",
+      "title": "XL/FD mutual exclusion",
+      "text": "ValidateFrame shall reject frames with both XL=true and FD=true.",
+      "standard": "iso26262",
+      "level": "HLR"
+    },
+    {
+      "id": "REQ-VIRT-001",
+      "title": "Virtual bus creation",
+      "text": "The system shall provide a VirtualBus that requires no OS dependencies.",
+      "standard": "iso26262",
+      "level": "HLR"
+    },
+    {
+      "id": "REQ-VIRT-002",
+      "title": "Frame broadcast",
+      "text": "Frames sent on the virtual bus shall be broadcast to all matching subscribers.",
+      "standard": "iso26262",
+      "level": "HLR"
+    },
+    {
+      "id": "REQ-VIRT-003",
+      "title": "Multiple subscribers",
+      "text": "The virtual bus shall support multiple concurrent subscribers with independent channels.",
+      "standard": "iso26262",
+      "level": "HLR"
+    },
+    {
+      "id": "REQ-VIRT-004",
+      "title": "Filter semantics",
+      "text": "The virtual bus shall deliver frames only to subscribers whose filters match.",
+      "standard": "iso26262",
+      "level": "HLR"
+    },
+    {
+      "id": "REQ-VIRT-005",
+      "title": "Back-pressure",
+      "text": "The virtual bus shall apply DropNewest, DropOldest, or Block back-pressure policy per subscriber.",
+      "standard": "iso26262",
+      "level": "HLR"
+    },
+    {
+      "id": "REQ-ISOTP-001",
+      "title": "Single frame",
+      "text": "ISO-TP shall transmit payloads ≤7 bytes in a single CAN frame.",
+      "standard": "iso26262",
+      "level": "HLR"
+    },
+    {
+      "id": "REQ-ISOTP-002",
+      "title": "Multi-frame send",
+      "text": "ISO-TP shall segment payloads >7 bytes into first frame + consecutive frames.",
+      "standard": "iso26262",
+      "level": "HLR"
+    },
+    {
+      "id": "REQ-ISOTP-003",
+      "title": "Flow control",
+      "text": "ISO-TP sender shall process flow control frames for block-size and ST_min pacing.",
+      "standard": "iso26262",
+      "level": "HLR"
+    },
+    {
+      "id": "REQ-ISOTP-004",
+      "title": "Multi-frame receive",
+      "text": "ISO-TP shall reassemble consecutive frames into a single payload.",
+      "standard": "iso26262",
+      "level": "HLR"
+    },
+    {
+      "id": "REQ-ISOTP-005",
+      "title": "Timeout",
+      "text": "ISO-TP shall respect context timeouts and return ErrTimeout on expiry.",
+      "standard": "iso26262",
+      "level": "HLR"
+    },
+    {
+      "id": "REQ-J1939-001",
+      "title": "29-bit ID decode",
+      "text": "J1939 shall decode priority, PGN, source, and destination from a 29-bit extended CAN ID.",
+      "standard": "iso26262",
+      "level": "HLR"
+    },
+    {
+      "id": "REQ-J1939-002",
+      "title": "PGN peer-to-peer",
+      "text": "J1939 shall treat PDU Format <240 as peer-to-peer with PS as destination.",
+      "standard": "iso26262",
+      "level": "HLR"
+    },
+    {
+      "id": "REQ-J1939-003",
+      "title": "PGN broadcast",
+      "text": "J1939 shall treat PDU Format ≥240 as broadcast with PS as group extension.",
+      "standard": "iso26262",
+      "level": "HLR"
+    },
+    {
+      "id": "REQ-J1939-004",
+      "title": "ID encode",
+      "text": "J1939 shall encode priority, PGN, source, and destination back to a 29-bit ID.",
+      "standard": "iso26262",
+      "level": "HLR"
+    },
+    {
+      "id": "REQ-J1939-005",
+      "title": "J1939 send/receive",
+      "text": "J1939Bus shall send and receive J1939 frames over an underlying CAN Bus.",
+      "standard": "iso26262",
+      "level": "HLR"
+    },
+    {
+      "id": "REQ-J1939-006",
+      "title": "PGN filter",
+      "text": "J1939Bus.subscribe shall filter by PGN.",
+      "standard": "iso26262",
+      "level": "HLR"
+    },
+    {
+      "id": "REQ-SAFETY-001",
+      "title": "E2E header",
+      "text": "Safety.Protector shall prepend a 10-byte E2E header to every payload.",
+      "standard": "iso26262",
+      "level": "HLR"
+    },
+    {
+      "id": "REQ-SAFETY-002",
+      "title": "CRC-16 protection",
+      "text": "The E2E header shall include a CRC-16/CCITT-FALSE over the header fields and payload.",
+      "standard": "iso26262",
+      "level": "HLR"
+    },
+    {
+      "id": "REQ-SAFETY-003",
+      "title": "Sequence counter",
+      "text": "The E2E header shall include a monotonically increasing sequence counter.",
+      "standard": "iso26262",
+      "level": "HLR"
+    },
+    {
+      "id": "REQ-SAFETY-004",
+      "title": "CRC validation",
+      "text": "Receiver shall return E2EError::CrcMismatch when the CRC does not match.",
+      "standard": "iso26262",
+      "level": "HLR"
+    },
+    {
+      "id": "REQ-SAFETY-005",
+      "title": "Sequence gap detection",
+      "text": "Receiver shall return E2EError::SequenceGap when sequence numbers are non-consecutive.",
+      "standard": "iso26262",
+      "level": "HLR"
+    },
+    {
+      "id": "REQ-SAFETY-006",
+      "title": "Header too short",
+      "text": "Receiver shall return E2EError::HeaderTooShort when data is shorter than 10 bytes.",
+      "standard": "iso26262",
+      "level": "HLR"
+    },
+    {
+      "id": "REQ-DBC-001",
+      "title": "DBC parse",
+      "text": "The DBC parser shall parse BO_ message blocks and SG_ signal definitions.",
+      "standard": "iso26262",
+      "level": "HLR"
+    },
+    {
+      "id": "REQ-DBC-002",
+      "title": "Signal decode",
+      "text": "The DBC parser shall decode signal values from CAN frame data using start bit, length, byte order, factor, and offset.",
+      "standard": "iso26262",
+      "level": "HLR"
+    }
+  ]
+}

@@ -4,17 +4,21 @@
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 //! Integration tests for rust-CAN.
+//!
+//! Every test is annotated with `//fusa:req` so that rsfusa verify can trace
+//! it to the requirement it verifies.
 
 use std::sync::Arc;
 
 use rust_can::relay::{Context, Protocol, SubscriberOptions};
 use rust_can::virtual_bus::VirtualBus;
-use rust_can::{adapt, from_message, to_message, Bus, Frame, Filter};
+use rust_can::{adapt, from_message, to_message, Bus, Filter, Frame};
 
 // ---------------------------------------------------------------------------
 // Virtual bus integration
 // ---------------------------------------------------------------------------
 
+//fusa:req REQ-VIRT-001, REQ-VIRT-002
 #[tokio::test]
 async fn virtual_bus_send_receive_roundtrip() {
     let bus = Arc::new(VirtualBus::new());
@@ -37,6 +41,7 @@ async fn virtual_bus_send_receive_roundtrip() {
     assert_eq!(received.data, sent.data);
 }
 
+//fusa:req REQ-VIRT-002, REQ-VIRT-003
 #[tokio::test]
 async fn virtual_bus_multiple_subscribers_all_receive() {
     let bus = Arc::new(VirtualBus::new());
@@ -70,6 +75,7 @@ async fn virtual_bus_multiple_subscribers_all_receive() {
     }
 }
 
+//fusa:req REQ-VIRT-004
 #[tokio::test]
 async fn virtual_bus_filter_precision() {
     let bus = Arc::new(VirtualBus::new());
@@ -80,7 +86,10 @@ async fn virtual_bus_filter_precision() {
         .unwrap();
     let rx_100 = bus
         .subscribe(
-            vec![Filter { id: 0x100, mask: 0x7FF }],
+            vec![Filter {
+                id: 0x100,
+                mask: 0x7FF,
+            }],
             SubscriberOptions::default(),
         )
         .await
@@ -88,13 +97,21 @@ async fn virtual_bus_filter_precision() {
 
     bus.send(
         Context::background(),
-        Frame { id: 0x100, data: vec![1], ..Default::default() },
+        Frame {
+            id: 0x100,
+            data: vec![1],
+            ..Default::default()
+        },
     )
     .await
     .unwrap();
     bus.send(
         Context::background(),
-        Frame { id: 0x200, data: vec![2], ..Default::default() },
+        Frame {
+            id: 0x200,
+            data: vec![2],
+            ..Default::default()
+        },
     )
     .await
     .unwrap();
@@ -114,6 +131,7 @@ async fn virtual_bus_filter_precision() {
 // Lifecycle invariants
 // ---------------------------------------------------------------------------
 
+//fusa:req REQ-CAN-008
 #[tokio::test]
 async fn close_then_send_returns_closed() {
     let bus = Arc::new(VirtualBus::new());
@@ -121,13 +139,17 @@ async fn close_then_send_returns_closed() {
     let err = bus
         .send(
             Context::background(),
-            Frame { id: 0x100, ..Default::default() },
+            Frame {
+                id: 0x100,
+                ..Default::default()
+            },
         )
         .await
         .unwrap_err();
     assert!(matches!(err, rust_can::Error::Closed));
 }
 
+//fusa:req REQ-CAN-008
 #[tokio::test]
 async fn close_then_subscribe_returns_closed() {
     let bus = Arc::new(VirtualBus::new());
@@ -139,6 +161,7 @@ async fn close_then_subscribe_returns_closed() {
     assert!(matches!(err, rust_can::Error::Closed));
 }
 
+//fusa:req REQ-CAN-008
 #[tokio::test]
 async fn close_is_idempotent() {
     let bus = Arc::new(VirtualBus::new());
@@ -151,6 +174,7 @@ async fn close_is_idempotent() {
 // RELAY adapter
 // ---------------------------------------------------------------------------
 
+//fusa:req REQ-CAN-007
 #[tokio::test]
 async fn adapt_send_and_receive_via_relay_node() {
     use rust_can::relay::Message;
@@ -172,6 +196,7 @@ async fn adapt_send_and_receive_via_relay_node() {
     assert_eq!(f.data, vec![0x01, 0x02]);
 }
 
+//fusa:req REQ-CAN-007
 #[tokio::test]
 async fn to_message_from_message_roundtrip() {
     let original = Frame {
@@ -198,24 +223,51 @@ async fn to_message_from_message_roundtrip() {
 // Frame validation
 // ---------------------------------------------------------------------------
 
+//fusa:req REQ-CAN-004, REQ-CAN-009
 #[test]
 fn validate_frame_standard_id_boundary() {
     use rust_can::validate_frame;
-    assert!(validate_frame(&Frame { id: 0x7FF, ..Default::default() }).is_ok());
-    assert!(validate_frame(&Frame { id: 0x800, ..Default::default() }).is_err());
+    assert!(validate_frame(&Frame {
+        id: 0x7FF,
+        ..Default::default()
+    })
+    .is_ok());
+    assert!(validate_frame(&Frame {
+        id: 0x800,
+        ..Default::default()
+    })
+    .is_err());
 }
 
+//fusa:req REQ-CAN-004, REQ-CAN-010
 #[test]
 fn validate_frame_extended_id_boundary() {
     use rust_can::validate_frame;
-    assert!(validate_frame(&Frame { id: 0x1FFF_FFFF, ext: true, ..Default::default() }).is_ok());
-    assert!(validate_frame(&Frame { id: 0x2000_0000, ext: true, ..Default::default() }).is_err());
+    assert!(validate_frame(&Frame {
+        id: 0x1FFF_FFFF,
+        ext: true,
+        ..Default::default()
+    })
+    .is_ok());
+    assert!(validate_frame(&Frame {
+        id: 0x2000_0000,
+        ext: true,
+        ..Default::default()
+    })
+    .is_err());
 }
 
+//fusa:req REQ-CAN-004, REQ-CAN-014
 #[test]
 fn validate_frame_fd_xl_mutual_exclusion() {
     use rust_can::validate_frame;
-    let f = Frame { id: 0x100, fd: true, xl: true, data: vec![0], ..Default::default() };
+    let f = Frame {
+        id: 0x100,
+        fd: true,
+        xl: true,
+        data: vec![0],
+        ..Default::default()
+    };
     assert!(validate_frame(&f).is_err());
 }
 
@@ -223,6 +275,7 @@ fn validate_frame_fd_xl_mutual_exclusion() {
 // Mock bus
 // ---------------------------------------------------------------------------
 
+//fusa:req REQ-CAN-003, REQ-CAN-006
 #[tokio::test]
 async fn mock_bus_records_and_injects() {
     use rust_can::mock::MockBus;
@@ -233,10 +286,13 @@ async fn mock_bus_records_and_injects() {
         .await
         .unwrap();
 
-    // Send a frame — should be recorded.
     bus.send(
         Context::background(),
-        Frame { id: 0x100, data: vec![42], ..Default::default() },
+        Frame {
+            id: 0x100,
+            data: vec![42],
+            ..Default::default()
+        },
     )
     .await
     .unwrap();
@@ -244,9 +300,12 @@ async fn mock_bus_records_and_injects() {
     assert_eq!(sent.len(), 1);
     assert_eq!(sent[0].id, 0x100);
 
-    // Inject a frame — subscriber should receive it.
-    bus.inject(Frame { id: 0x200, data: vec![99], ..Default::default() })
-        .await;
+    bus.inject(Frame {
+        id: 0x200,
+        data: vec![99],
+        ..Default::default()
+    })
+    .await;
     let f = rx.recv().await.unwrap();
     assert_eq!(f.id, 0x200);
     assert_eq!(f.data, vec![99]);
@@ -256,11 +315,15 @@ async fn mock_bus_records_and_injects() {
 // Safety E2E
 // ---------------------------------------------------------------------------
 
+//fusa:req REQ-SAFETY-001, REQ-SAFETY-002, REQ-SAFETY-003, REQ-SAFETY-004
 #[test]
 fn safety_protect_unwrap_roundtrip() {
     use rust_can::safety::{Config, Protector, Receiver};
 
-    let cfg = Config { data_id: 0x0001, source_id: 0x0002 };
+    let cfg = Config {
+        data_id: 0x0001,
+        source_id: 0x0002,
+    };
     let protector = Protector::new(cfg);
     let receiver = Receiver::new(cfg);
 
@@ -272,11 +335,15 @@ fn safety_protect_unwrap_roundtrip() {
     assert_eq!(recovered, payload);
 }
 
+//fusa:req REQ-SAFETY-002, REQ-SAFETY-004
 #[test]
 fn safety_crc_mismatch_detected() {
     use rust_can::safety::{Config, E2EErrorKind, Protector, Receiver};
 
-    let cfg = Config { data_id: 0x0001, source_id: 0x0002 };
+    let cfg = Config {
+        data_id: 0x0001,
+        source_id: 0x0002,
+    };
     let protector = Protector::new(cfg);
     let receiver = Receiver::new(cfg);
 
@@ -291,6 +358,7 @@ fn safety_crc_mismatch_detected() {
 // J1939
 // ---------------------------------------------------------------------------
 
+//fusa:req REQ-J1939-001, REQ-J1939-004
 #[test]
 fn j1939_encode_decode_roundtrip() {
     use rust_can::j1939::{decode_id, encode_id, Pgn, Priority, BROADCAST_ADDR};
@@ -312,6 +380,7 @@ fn j1939_encode_decode_roundtrip() {
 // DBC
 // ---------------------------------------------------------------------------
 
+//fusa:req REQ-DBC-001, REQ-DBC-002
 #[test]
 fn dbc_parse_and_decode() {
     use rust_can::dbc::parse;
@@ -338,6 +407,7 @@ BO_ 100 SpeedMsg: 4 ECU
 // ISO-TP
 // ---------------------------------------------------------------------------
 
+//fusa:req REQ-ISOTP-001, REQ-ISOTP-002, REQ-ISOTP-004
 #[tokio::test]
 async fn isotp_single_frame_roundtrip() {
     use rust_can::isotp::{Config, IsoTpConn};
@@ -361,14 +431,9 @@ async fn isotp_single_frame_roundtrip() {
 
     let payload = b"hello!!"; // exactly 7 bytes — single frame
 
-    let recv_handle = tokio::spawn(async move {
-        receiver.recv(Context::background()).await
-    });
+    let recv_handle = tokio::spawn(async move { receiver.recv(Context::background()).await });
 
-    sender
-        .send(Context::background(), payload)
-        .await
-        .unwrap();
+    sender.send(Context::background(), payload).await.unwrap();
 
     let result = recv_handle.await.unwrap().unwrap();
     assert_eq!(result, payload);
@@ -378,6 +443,7 @@ async fn isotp_single_frame_roundtrip() {
 // Spec version
 // ---------------------------------------------------------------------------
 
+//fusa:req REQ-CAN-001
 #[test]
 fn spec_version_constant() {
     assert_eq!(rust_can::SPEC_VERSION, "1.1");

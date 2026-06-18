@@ -167,11 +167,7 @@ impl Receiver {
             return Err(E2EError {
                 kind: E2EErrorKind::HeaderTooShort,
                 counter: 0,
-                message: format!(
-                    "need {} bytes, got {}",
-                    HEADER_SIZE,
-                    data.len()
-                ),
+                message: format!("need {} bytes, got {}", HEADER_SIZE, data.len()),
             });
         }
 

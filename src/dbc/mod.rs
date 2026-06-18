@@ -397,7 +397,7 @@ BO_ 512 TransmissionData: 4 TCU
  SG_ GearPosition : 0|4@1+ (1,0) [0|15] "" Vector__XXX
 "#;
 
-    //fusa:req REQ-DBC-001
+    //fusa:test REQ-DBC-001
     #[test]
     fn parse_messages() {
         let db = parse(SAMPLE_DBC).unwrap();
@@ -413,7 +413,7 @@ BO_ 512 TransmissionData: 4 TCU
         assert_eq!(trans.signals.len(), 1);
     }
 
-    //fusa:req REQ-DBC-002
+    //fusa:test REQ-DBC-002
     #[test]
     fn decode_unsigned_signal() {
         let db = parse(SAMPLE_DBC).unwrap();

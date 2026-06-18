@@ -11,7 +11,7 @@
 //! Requires Linux kernel ≥ 2.6.25 and a SocketCAN-capable interface
 //! (e.g. `can0`, `vcan0`).
 
-use std::os::unix::io::{FromRawFd, RawFd};
+use std::os::unix::io::{AsRawFd, FromRawFd, RawFd};
 use std::sync::{
     atomic::{AtomicBool, Ordering},
     Arc,
@@ -110,11 +110,9 @@ impl SocketCanBus {
 
         // Bind to the interface.
         let iface_idx = get_iface_index(fd, iface)?;
-        let addr = libc::sockaddr_can {
-            can_family: AF_CAN as u16,
-            can_ifindex: iface_idx,
-            can_addr: Default::default(),
-        };
+        let mut addr: libc::sockaddr_can = unsafe { std::mem::zeroed() };
+        addr.can_family = AF_CAN as u16;
+        addr.can_ifindex = iface_idx;
 
         let bind_ret = unsafe {
             libc::bind(
@@ -482,7 +480,7 @@ fn get_iface_index(fd: RawFd, name: &str) -> Result<libc::c_int, Error> {
         );
     }
 
-    let ret = unsafe { libc::ioctl(fd, libc::SIOCGIFINDEX, &req) };
+    let ret = unsafe { libc::ioctl(fd, libc::SIOCGIFINDEX as _, &req) };
     if ret < 0 {
         return Err(Error::Io(std::io::Error::last_os_error()));
     }
@@ -490,18 +488,6 @@ fn get_iface_index(fd: RawFd, name: &str) -> Result<libc::c_int, Error> {
     Ok(unsafe { req.ifr_ifru.ifru_ifindex })
 }
 
-// ---------------------------------------------------------------------------
-// AsyncFd raw fd extension
-// ---------------------------------------------------------------------------
-
-use std::os::unix::io::AsRawFd;
-
-impl AsRawFd for std::fs::File {
-    fn as_raw_fd(&self) -> RawFd {
-        use std::os::unix::io::AsRawFd as _;
-        std::os::unix::io::AsRawFd::as_raw_fd(self)
-    }
-}
 
 // No unit tests for SocketCAN here since they require a real Linux SocketCAN
 // interface. See tests/socketcan_test.rs (requires vcan0 to be set up).

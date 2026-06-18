@@ -290,9 +290,9 @@ fn parse_signal_line(line: &str) -> Result<DbcSignal, Error> {
     };
 
     // Parse: "<unit>"
-    let unit = if rest.starts_with('"') {
-        let end_quote = rest[1..].find('"').map(|p| p + 1).unwrap_or(rest.len() - 1);
-        rest[1..end_quote].to_string()
+    let unit = if let Some(rest_inner) = rest.strip_prefix('"') {
+        let end_quote = rest_inner.find('"').unwrap_or(rest_inner.len());
+        rest_inner[..end_quote].to_string()
     } else {
         String::new()
     };
@@ -325,7 +325,7 @@ pub fn decode_signal(sig: &DbcSignal, data: &[u8]) -> f64 {
         sig.byte_order,
     );
 
-    let phys = match sig.value_type {
+    match sig.value_type {
         ValueType::Unsigned => raw as f64 * sig.factor + sig.offset,
         ValueType::Signed => {
             // Two's complement sign extension.
@@ -338,9 +338,7 @@ pub fn decode_signal(sig: &DbcSignal, data: &[u8]) -> f64 {
             };
             signed as f64 * sig.factor + sig.offset
         }
-    };
-
-    phys
+    }
 }
 
 /// Extract a raw unsigned integer from `data` at `start_bit` with `length` bits.

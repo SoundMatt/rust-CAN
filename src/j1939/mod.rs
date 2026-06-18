@@ -263,7 +263,7 @@ mod tests {
     fn decode_peer_to_peer() {
         // PF = 0xEC (236 < 240) → peer-to-peer
         // Priority=6, DP=0, PF=0xEC, PS=0x00 (dst), SA=0x01
-        let id: u32 = (6 << 26) | (0xEC << 16) | (0x00 << 8) | 0x01;
+        let id: u32 = (6 << 26) | (0xEC << 16) | 0x01; // PS=0x00 is elided (no-op)
         let (priority, pgn, src) = decode_id(id);
         assert_eq!(priority.value(), 6);
         assert!(pgn.is_peer_to_peer());
@@ -274,7 +274,7 @@ mod tests {
     fn decode_broadcast() {
         // PF = 0xFE (254 ≥ 240) → broadcast
         // Priority=6, DP=0, PF=0xFE, PS=0x00, SA=0x01
-        let id: u32 = (6 << 26) | (0xFE << 16) | (0x00 << 8) | 0x01;
+        let id: u32 = (6 << 26) | (0xFE << 16) | 0x01; // PS=0x00 is elided (no-op)
         let (priority, pgn, src) = decode_id(id);
         assert_eq!(priority.value(), 6);
         assert!(!pgn.is_peer_to_peer());

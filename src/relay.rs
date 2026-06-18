@@ -212,7 +212,7 @@ impl Context {
 
     /// Returns true if the deadline has passed.
     pub fn done(&self) -> bool {
-        self.deadline.map_or(false, |d| Instant::now() >= d)
+        self.deadline.is_some_and(|d| Instant::now() >= d)
     }
 }
 

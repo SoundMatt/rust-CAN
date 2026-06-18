@@ -229,9 +229,18 @@ mod tests {
     #[tokio::test]
     async fn sub_inner_drop_newest() {
         let inner = SubInner::new(2, BackPressurePolicy::DropNewest);
-        let f1 = Frame { id: 1, ..Default::default() };
-        let f2 = Frame { id: 2, ..Default::default() };
-        let f3 = Frame { id: 3, ..Default::default() };
+        let f1 = Frame {
+            id: 1,
+            ..Default::default()
+        };
+        let f2 = Frame {
+            id: 2,
+            ..Default::default()
+        };
+        let f3 = Frame {
+            id: 3,
+            ..Default::default()
+        };
         assert!(inner.push(f1));
         assert!(inner.push(f2));
         // Queue full — drop newest (incoming).
@@ -245,9 +254,18 @@ mod tests {
     #[tokio::test]
     async fn sub_inner_drop_oldest() {
         let inner = SubInner::new(2, BackPressurePolicy::DropOldest);
-        let f1 = Frame { id: 1, ..Default::default() };
-        let f2 = Frame { id: 2, ..Default::default() };
-        let f3 = Frame { id: 3, ..Default::default() };
+        let f1 = Frame {
+            id: 1,
+            ..Default::default()
+        };
+        let f2 = Frame {
+            id: 2,
+            ..Default::default()
+        };
+        let f3 = Frame {
+            id: 3,
+            ..Default::default()
+        };
         inner.push(f1);
         inner.push(f2);
         // Queue full — drop oldest (f1).
@@ -260,9 +278,14 @@ mod tests {
     #[tokio::test]
     async fn frame_receiver_recv_and_close() {
         let inner = Arc::new(SubInner::new(4, BackPressurePolicy::DropNewest));
-        let rx = FrameReceiver { inner: inner.clone() };
+        let rx = FrameReceiver {
+            inner: inner.clone(),
+        };
 
-        let f = Frame { id: 0x200, ..Default::default() };
+        let f = Frame {
+            id: 0x200,
+            ..Default::default()
+        };
         inner.push(f);
         inner.close();
 

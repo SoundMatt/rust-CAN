@@ -18,9 +18,7 @@ use std::sync::{
 };
 
 use async_trait::async_trait;
-use libc::{
-    AF_CAN, SOCK_RAW, SOL_CAN_RAW,
-};
+use libc::{AF_CAN, SOCK_RAW, SOL_CAN_RAW};
 use tokio::io::unix::AsyncFd;
 use tokio::sync::Mutex;
 
@@ -101,9 +99,7 @@ pub struct SocketCanBus {
 impl SocketCanBus {
     /// Open a SocketCAN bus on the given interface (e.g. `"vcan0"`).
     pub fn new(iface: &str) -> Result<Self, Error> {
-        let fd = unsafe {
-            libc::socket(PF_CAN, SOCK_RAW, CAN_RAW)
-        };
+        let fd = unsafe { libc::socket(PF_CAN, SOCK_RAW, CAN_RAW) };
         if fd < 0 {
             return Err(Error::Io(std::io::Error::last_os_error()));
         }
@@ -146,9 +142,7 @@ impl SocketCanBus {
         }
 
         let file = unsafe { std::fs::File::from_raw_fd(fd) };
-        let async_fd = Arc::new(
-            AsyncFd::new(file).map_err(|e| Error::Io(e))?,
-        );
+        let async_fd = Arc::new(AsyncFd::new(file).map_err(|e| Error::Io(e))?);
 
         let closed = Arc::new(AtomicBool::new(false));
         let subscribers: Arc<Mutex<Vec<Arc<SubInner>>>> = Arc::new(Mutex::new(Vec::new()));
@@ -487,7 +481,6 @@ fn get_iface_index(fd: RawFd, name: &str) -> Result<libc::c_int, Error> {
 
     Ok(unsafe { req.ifr_ifru.ifru_ifindex })
 }
-
 
 // No unit tests for SocketCAN here since they require a real Linux SocketCAN
 // interface. See tests/socketcan_test.rs (requires vcan0 to be set up).

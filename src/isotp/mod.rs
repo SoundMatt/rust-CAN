@@ -176,11 +176,8 @@ impl IsoTpConn {
                 buf.extend_from_slice(&first.data[2..]);
 
                 // Send flow control: ContinueToSend.
-                let fc_frame = self.make_frame(vec![
-                    TYPE_FC | FC_CTS,
-                    self.cfg.block_size,
-                    self.cfg.st_min,
-                ]);
+                let fc_frame =
+                    self.make_frame(vec![TYPE_FC | FC_CTS, self.cfg.block_size, self.cfg.st_min]);
                 self.bus.send(Context::background(), fc_frame).await?;
 
                 // Receive consecutive frames.
@@ -304,10 +301,7 @@ impl IsoTpConn {
         Ok(())
     }
 
-    async fn wait_fc(
-        &self,
-        tmo: Duration,
-    ) -> Result<Vec<u8>, Error> {
+    async fn wait_fc(&self, tmo: Duration) -> Result<Vec<u8>, Error> {
         //fusa:req REQ-ISOTP-005
         let f = timeout(tmo, self.rx.recv())
             .await
@@ -399,8 +393,7 @@ mod tests {
         let payload: Vec<u8> = (0..20).collect();
         let payload_clone = payload.clone();
 
-        let recv_task =
-            tokio::spawn(async move { receiver.recv(Context::background()).await });
+        let recv_task = tokio::spawn(async move { receiver.recv(Context::background()).await });
 
         sender.send(Context::background(), &payload).await.unwrap();
 

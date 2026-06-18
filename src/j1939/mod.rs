@@ -155,7 +155,10 @@ pub struct J1939Bus {
 impl J1939Bus {
     /// Create a J1939 bus with the given source address.
     pub fn new(bus: Arc<dyn Bus>, source_address: u8) -> Self {
-        Self { bus, source_address }
+        Self {
+            bus,
+            source_address,
+        }
     }
 
     /// Send a J1939 frame.

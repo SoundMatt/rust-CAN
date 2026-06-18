@@ -302,10 +302,7 @@ pub trait Node: Send + Sync {
 
     async fn send(&self, ctx: Context, msg: Message) -> Result<(), Error>;
 
-    async fn subscribe(
-        &self,
-        opts: SubscriberOptions,
-    ) -> Result<mpsc::Receiver<Message>, Error>;
+    async fn subscribe(&self, opts: SubscriberOptions) -> Result<mpsc::Receiver<Message>, Error>;
 
     async fn close(&self) -> Result<(), Error>;
 }

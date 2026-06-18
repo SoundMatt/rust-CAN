@@ -53,10 +53,9 @@ pub fn to_message(f: &Frame) -> Message {
 /// Returns `Error::InvalidFrame` if `msg.id` cannot be parsed as a `u32`.
 //fusa:req REQ-CAN-007
 pub fn from_message(m: &Message) -> Result<Frame, Error> {
-    let id: u32 = m
-        .id
-        .parse()
-        .map_err(|_| Error::invalid_frame(format!("invalid CAN ID: '{}'", m.id)))?;
+    let id: u32 =
+        m.id.parse()
+            .map_err(|_| Error::invalid_frame(format!("invalid CAN ID: '{}'", m.id)))?;
 
     let ext = m.meta.get("can.ext").map(|v| v == "true").unwrap_or(false);
     let fd = m.meta.get("can.fd").map(|v| v == "true").unwrap_or(false);
@@ -105,16 +104,13 @@ impl crate::relay::Node for CanAdapter {
     /// Send a relay::Message by converting it to a CAN frame.
     async fn send(&self, ctx: Context, msg: Message) -> Result<(), crate::relay::Error> {
         let frame = from_message(&msg).map_err(|_| crate::relay::Error::PayloadTooLarge)?;
-        self.bus
-            .send(ctx, frame)
-            .await
-            .map_err(|e| match e {
-                Error::Closed => crate::relay::Error::Closed,
-                Error::NotConnected => crate::relay::Error::NotConnected,
-                Error::Timeout => crate::relay::Error::Timeout,
-                Error::PayloadTooLarge => crate::relay::Error::PayloadTooLarge,
-                _ => crate::relay::Error::Closed, // map to Closed as a safe default
-            })
+        self.bus.send(ctx, frame).await.map_err(|e| match e {
+            Error::Closed => crate::relay::Error::Closed,
+            Error::NotConnected => crate::relay::Error::NotConnected,
+            Error::Timeout => crate::relay::Error::Timeout,
+            Error::PayloadTooLarge => crate::relay::Error::PayloadTooLarge,
+            _ => crate::relay::Error::Closed, // map to Closed as a safe default
+        })
     }
 
     /// Subscribe to the bus and forward frames as relay::Messages.
@@ -234,7 +230,10 @@ mod tests {
             seq: 0,
             meta: Default::default(),
         };
-        assert!(matches!(from_message(&msg), Err(Error::InvalidFrame { .. })));
+        assert!(matches!(
+            from_message(&msg),
+            Err(Error::InvalidFrame { .. })
+        ));
     }
 
     #[tokio::test]

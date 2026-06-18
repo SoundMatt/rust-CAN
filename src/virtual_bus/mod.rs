@@ -17,7 +17,9 @@ use async_trait::async_trait;
 use tokio::sync::Mutex;
 use tokio::time::{sleep, Duration};
 
-use crate::bus::{Bus, Drainer, FrameReceiver, HealthProvider, LoaningBus, MetricsProvider, SubInner};
+use crate::bus::{
+    Bus, Drainer, FrameReceiver, HealthProvider, LoaningBus, MetricsProvider, SubInner,
+};
 use crate::error::Error;
 use crate::frame::{Filter, Frame, LoanedFrame};
 use crate::relay::{Context, Health, Metrics, SubscriberOptions};
@@ -148,8 +150,7 @@ impl Bus for VirtualBus {
         let (delivered, dropped) = guard.broadcast(&frame);
         drop(guard);
 
-        self.deliver_count
-            .fetch_add(delivered, Ordering::Relaxed);
+        self.deliver_count.fetch_add(delivered, Ordering::Relaxed);
         self.drop_count.fetch_add(dropped, Ordering::Relaxed);
         self.bytes_delivered
             .fetch_add(payload_len * delivered, Ordering::Relaxed);
@@ -338,7 +339,10 @@ mod tests {
     #[tokio::test]
     async fn filter_semantics() {
         let bus = VirtualBus::new();
-        let filter = vec![Filter { id: 0x100, mask: 0x7FF }];
+        let filter = vec![Filter {
+            id: 0x100,
+            mask: 0x7FF,
+        }];
         let rx = bus
             .subscribe(filter, SubscriberOptions::default())
             .await

@@ -35,30 +35,30 @@
 //! }
 //! ```
 
-pub mod relay;
+pub mod adapt;
+pub mod bus;
+pub(crate) mod crc;
+pub mod dbc;
 pub mod error;
 pub mod frame;
-pub mod bus;
-pub mod adapt;
-pub mod virtual_bus;
-pub mod mock;
 pub mod isotp;
 pub mod j1939;
-pub mod dbc;
+pub mod mock;
+pub mod relay;
 pub mod safety;
-pub(crate) mod crc;
+pub mod virtual_bus;
 
 #[cfg(target_os = "linux")]
 pub mod socketcan;
 
+pub use adapt::{adapt, from_message, to_message};
+pub use bus::{Bus, Drainer, FrameReceiver, HealthProvider, LoaningBus, MetricsProvider};
 pub use error::Error;
 pub use frame::{
-    validate_frame, max_data_len, Frame, Filter, LoanedFrame,
-    CAN_MAX_DATA_LEN, CAN_FD_MAX_DATA_LEN, CAN_XL_MIN_DATA_LEN, CAN_XL_MAX_DATA_LEN,
-    CAN_MAX_STD_ID, CAN_MAX_EXT_ID, CAN_XL_MAX_PRIO_ID,
+    max_data_len, validate_frame, Filter, Frame, LoanedFrame, CAN_FD_MAX_DATA_LEN,
+    CAN_MAX_DATA_LEN, CAN_MAX_EXT_ID, CAN_MAX_STD_ID, CAN_XL_MAX_DATA_LEN, CAN_XL_MAX_PRIO_ID,
+    CAN_XL_MIN_DATA_LEN,
 };
-pub use bus::{Bus, LoaningBus, HealthProvider, MetricsProvider, Drainer, FrameReceiver};
-pub use adapt::{to_message, from_message, adapt};
 
 /// The RELAY spec version this implementation targets.
 pub const SPEC_VERSION: &str = "1.1";

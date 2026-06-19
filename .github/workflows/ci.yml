@@ -238,12 +238,13 @@ jobs:
 
       - name: RELAY interop (CAN golden vectors — must be EQUIVALENT)
         run: |
-          output=$(relay interop ./target/release/rust-can 2>&1)
-          echo "$output"
-          # Gate on CAN-protocol vectors only; rust-CAN is a single-protocol
-          # CAN tool — non-CAN protocol vectors from relay interop v1.10 are
-          # expected to return exit 2 (unsupported protocol).
-          if echo "$output" | grep -A2 "(CAN)" | grep -qE "ERROR|FAIL"; then
+          # Capture output without propagating exit code — relay interop exits
+          # non-zero when any vector is non-EQUIVALENT, but we gate only on
+          # CAN-protocol vectors (rust-CAN is CAN-only; DDS/LIN/MQTT/RCP/
+          # SOMEIP vectors correctly exit 2 as unsupported).
+          interop_out=$(relay interop ./target/release/rust-can 2>&1) || true
+          echo "$interop_out"
+          if echo "$interop_out" | grep -A2 "(CAN)" | grep -qE "ERROR|FAIL"; then
             echo "FAIL: one or more CAN golden vectors not EQUIVALENT"
             exit 1
           fi

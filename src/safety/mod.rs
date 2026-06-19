@@ -22,6 +22,11 @@ use std::sync::{
 
 use crate::crc::crc16_ccitt_false;
 
+#[cfg(feature = "hmac-auth")]
+pub mod hmac_auth;
+#[cfg(feature = "hmac-auth")]
+pub use hmac_auth::HmacSha256Auth;
+
 /// Size of the E2E header in bytes.
 const HEADER_SIZE: usize = 10;
 

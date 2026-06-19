@@ -37,10 +37,16 @@ const PF_CAN: libc::c_int = 29;
 const CAN_RAW: libc::c_int = 1;
 /// CAN FD frames flag in socket options.
 const CAN_RAW_FD_FRAMES: libc::c_int = 5;
+/// Error frame filter socket option.
+const CAN_RAW_ERR_FILTER: libc::c_int = 4;
 /// EFF (Extended Frame Format) flag in can_id.
 const CAN_EFF_FLAG: u32 = 0x8000_0000;
 /// RTR (Remote Transmission Request) flag in can_id.
 const CAN_RTR_FLAG: u32 = 0x4000_0000;
+/// Error frame flag in can_id — set when the kernel delivers an error frame.
+const CAN_ERR_FLAG: u32 = 0x2000_0000;
+/// Bus-off error bit inside an error frame can_id.
+const CAN_ERR_BUSOFF: u32 = 0x0000_0040;
 /// Mask for the actual CAN ID bits.
 const CAN_SFF_MASK: u32 = 0x000_07FF;
 const CAN_EFF_MASK: u32 = 0x1FFF_FFFF;
@@ -86,12 +92,15 @@ struct CanFdFrame {
 ///
 /// Supports classic CAN and CAN FD frames. Subscriptions are handled by
 /// a background tokio task that reads from the socket.
+//fusa:req REQ-SEC-008
 pub struct SocketCanBus {
     fd: RawFd,
     // Keeps the file and async readiness alive; read by the reader task (not via self).
     #[allow(dead_code)]
     async_fd: Arc<AsyncFd<std::fs::File>>,
     closed: Arc<AtomicBool>,
+    /// Set by the reader task when a CAN_ERR_BUSOFF error frame is received.
+    bus_off: Arc<AtomicBool>,
     subscribers: Arc<Mutex<Vec<Arc<SubInner>>>>,
     // Remembered for future send-path FD capability checks.
     #[allow(dead_code)]
@@ -142,6 +151,19 @@ impl SocketCanBus {
         };
         let fd_enabled = fd_ret == 0;
 
+        // Enable bus-off error frame delivery (REQ-SEC-008).
+        let err_mask: u32 = CAN_ERR_BUSOFF;
+        //fusa:unsafe SAFETY: setsockopt(2) sets error filter; failure is non-fatal (bus-off detection degrades gracefully)
+        unsafe {
+            libc::setsockopt(
+                fd,
+                SOL_CAN_RAW,
+                CAN_RAW_ERR_FILTER,
+                &err_mask as *const u32 as *const libc::c_void,
+                std::mem::size_of::<u32>() as libc::socklen_t,
+            )
+        };
+
         // Set socket to non-blocking for async use.
         //fusa:unsafe SAFETY: fcntl(2) sets O_NONBLOCK on a valid fd; both calls succeed for valid fds
         unsafe {
@@ -154,21 +176,24 @@ impl SocketCanBus {
         let async_fd = Arc::new(AsyncFd::new(file).map_err(Error::Io)?);
 
         let closed = Arc::new(AtomicBool::new(false));
+        let bus_off = Arc::new(AtomicBool::new(false));
         let subscribers: Arc<Mutex<Vec<Arc<SubInner>>>> = Arc::new(Mutex::new(Vec::new()));
 
         // Spawn the reader task.
         let closed_clone = closed.clone();
+        let bus_off_clone = bus_off.clone();
         let subs_clone = subscribers.clone();
         let async_fd_clone = async_fd.clone();
         let fd_enabled_clone = fd_enabled;
         tokio::spawn(async move {
-            reader_task(async_fd_clone, closed_clone, subs_clone, fd_enabled_clone).await;
+            reader_task(async_fd_clone, closed_clone, bus_off_clone, subs_clone, fd_enabled_clone).await;
         });
 
         Ok(Self {
             fd,
             async_fd,
             closed,
+            bus_off,
             subscribers,
             fd_enabled,
         })
@@ -187,6 +212,9 @@ impl Bus for SocketCanBus {
     async fn send(&self, _ctx: Context, frame: Frame) -> Result<(), Error> {
         if self.closed.load(Ordering::SeqCst) {
             return Err(Error::Closed);
+        }
+        if self.bus_off.load(Ordering::SeqCst) {
+            return Err(Error::BusOff);
         }
 
         crate::validate_frame(&frame)?;
@@ -351,6 +379,7 @@ fn parse_fd_frame(raw: &CanFdFrame) -> Frame {
 async fn reader_task(
     async_fd: Arc<AsyncFd<std::fs::File>>,
     closed: Arc<AtomicBool>,
+    bus_off: Arc<AtomicBool>,
     subscribers: Arc<Mutex<Vec<Arc<SubInner>>>>,
     fd_enabled: bool,
 ) {
@@ -367,7 +396,9 @@ async fn reader_task(
             Err(_) => break,
         };
 
-        let frame = if fd_enabled {
+        // raw_can_id is read from the kernel and retains all flag bits
+        // (CAN_ERR_FLAG, CAN_EFF_FLAG, CAN_RTR_FLAG) before any masking.
+        let (frame, raw_can_id) = if fd_enabled {
             // Try to read a FD frame first (larger).
             let mut raw = CanFdFrame {
                 can_id: 0,
@@ -393,7 +424,8 @@ async fn reader_task(
                 }
                 break;
             }
-            if n as usize == std::mem::size_of::<CanFdFrame>() {
+            let raw_can_id = raw.can_id;
+            let f = if n as usize == std::mem::size_of::<CanFdFrame>() {
                 parse_fd_frame(&raw)
             } else {
                 // Classic CAN frame — reinterpret the bytes.
@@ -407,7 +439,8 @@ async fn reader_task(
                 };
                 classic.data[..8].copy_from_slice(&raw.data[..8]);
                 parse_classic_frame(&classic)
-            }
+            };
+            (f, raw_can_id)
         } else {
             let mut raw = CanFrame {
                 can_id: 0,
@@ -433,10 +466,21 @@ async fn reader_task(
                 }
                 break;
             }
-            parse_classic_frame(&raw)
+            let raw_can_id = raw.can_id;
+            (parse_classic_frame(&raw), raw_can_id)
         };
 
         guard.clear_ready();
+
+        // Detect bus-off error frames (REQ-SEC-008).
+        // Error frames have CAN_ERR_FLAG set in the raw can_id; parse_*_frame
+        // strips these flag bits, so we must check raw_can_id here, not frame.id.
+        if raw_can_id & CAN_ERR_FLAG != 0 {
+            if raw_can_id & CAN_ERR_BUSOFF != 0 {
+                bus_off.store(true, Ordering::SeqCst);
+            }
+            continue; // never deliver kernel error frames to subscribers
+        }
 
         // Deliver to subscribers.
         let subs = subscribers.lock().await;

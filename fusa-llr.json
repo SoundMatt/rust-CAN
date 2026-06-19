@@ -1,0 +1,163 @@
+{
+  "$schema": "https://rsfusa.dev/schemas/llr/v1",
+  "project": "rust-CAN",
+  "version": "0.2.0",
+  "standard": "ISO 26262-6:2018 ASIL-B",
+  "date": "2026-06-19",
+  "llrs": [
+    {
+      "id": "LLR-CAN-004-1",
+      "title": "E2E header is prepended as first 10 bytes of the serialised payload",
+      "hlr": "REQ-CAN-004",
+      "description": "The `Protector::protect()` function shall produce an output byte slice whose first 10 bytes are the E2E header (DataID 2 B, SourceID 2 B, SeqCtr 4 B, CRC16 2 B) and whose remaining bytes are the original payload.",
+      "rationale": "Ensures the downstream `Receiver` can locate the header at a fixed offset without out-of-band signalling.",
+      "implementation": "src/safety/mod.rs — `Protector::protect()`, `build_header()`",
+      "verificationMethod": "test",
+      "tests": ["safety::tests::header_prepended", "safety::tests::protect_and_unwrap"],
+      "asil": "ASIL-B"
+    },
+    {
+      "id": "LLR-CAN-004-2",
+      "title": "CRC-16/CCITT-FALSE is computed over the first 8 header bytes (CRC slot = 0) concatenated with the payload",
+      "hlr": "REQ-CAN-004",
+      "description": "The CRC field (bytes 8–9 of the header) shall be computed using the CRC-16/CCITT-FALSE algorithm (init=0xFFFF, poly=0x1021, no reflection) with the CRC slot treated as 0x0000 during computation.",
+      "rationale": "Matches the standard E2E Profile 2 / AUTOSAR-compatible wire format; allows the receiver to validate without knowing the sender's counter value in advance.",
+      "implementation": "src/safety/mod.rs — `build_header()`, `crc16_ccitt_false_cont()`; src/crc.rs — `crc16_ccitt_false()`",
+      "verificationMethod": "test",
+      "tests": ["safety::tests::protect_and_unwrap", "integration_test::safety_crc_known_vector"],
+      "asil": "ASIL-B"
+    },
+    {
+      "id": "LLR-CAN-004-3",
+      "title": "Sequence counter increments monotonically by 1 on each call to protect()",
+      "hlr": "REQ-CAN-004",
+      "description": "`Protector` shall maintain an `AtomicU32` sequence counter initialised to 0 and incremented by 1 (wrapping on overflow) on each call to `protect()`.",
+      "rationale": "Provides the sequence integrity required for loss-of-frame detection at the receiver.",
+      "implementation": "src/safety/mod.rs — `Protector::seq` (AtomicU32), `protect()` fetch_add",
+      "verificationMethod": "test",
+      "tests": ["safety::tests::sequence_counter_increments"],
+      "asil": "ASIL-B"
+    },
+    {
+      "id": "LLR-CAN-006-1",
+      "title": "Receiver rejects payloads shorter than 10 bytes with HeaderTooShort",
+      "hlr": "REQ-CAN-006",
+      "description": "`Receiver::unwrap()` shall return `E2EErrorKind::HeaderTooShort` when the input slice length is less than `HEADER_SIZE` (10).",
+      "rationale": "Prevents out-of-bounds slice indexing on malformed or truncated frames.",
+      "implementation": "src/safety/mod.rs — `Receiver::unwrap()` length guard at top of function",
+      "verificationMethod": "test",
+      "tests": ["safety::tests::header_too_short_detected"],
+      "asil": "ASIL-B"
+    },
+    {
+      "id": "LLR-CAN-006-2",
+      "title": "Receiver rejects frames with CRC mismatch",
+      "hlr": "REQ-CAN-006",
+      "description": "`Receiver::unwrap()` shall recompute the CRC over the received header (CRC slot = 0) and payload; if the recomputed CRC differs from the header's CRC field the function shall return `E2EErrorKind::CrcMismatch`.",
+      "rationale": "Detects random transmission bit errors (Hamming distance ≥ 4 up to 32767 bits for CRC-16/CCITT-FALSE).",
+      "implementation": "src/safety/mod.rs — `Receiver::unwrap()` CRC check block",
+      "verificationMethod": "test",
+      "tests": ["safety::tests::crc_mismatch_detected", "integration_test::safety_crc_mismatch_detected"],
+      "asil": "ASIL-B"
+    },
+    {
+      "id": "LLR-CAN-006-3",
+      "title": "Receiver rejects frames where the sequence counter is not consecutive",
+      "hlr": "REQ-CAN-006",
+      "description": "After the first successfully received frame, `Receiver::unwrap()` shall return `E2EErrorKind::SequenceGap` whenever the received counter is not equal to `last_seq.wrapping_add(1)`.",
+      "rationale": "Detects dropped or reordered frames, satisfying the sequence integrity requirement.",
+      "implementation": "src/safety/mod.rs — `Receiver::unwrap()` sequence gap check; `ReceiverState.first` flag for skip on first frame",
+      "verificationMethod": "test",
+      "tests": ["safety::tests::sequence_gap_detected", "integration_test::sec_replay_detection_via_sequence_counter"],
+      "asil": "ASIL-B"
+    },
+    {
+      "id": "LLR-SAFETY-001-1",
+      "title": "Config supplies DataID and SourceID to header builder",
+      "hlr": "REQ-SAFETY-001",
+      "description": "`Config.data_id` (u16) and `Config.source_id` (u16) are written into bytes 0–1 and 2–3 of the E2E header as little-endian values on every call to `protect()`.",
+      "rationale": "Allows the receiver to distinguish frames from different data elements and sources.",
+      "implementation": "src/safety/mod.rs — `build_header()` hdr[0..2], hdr[2..4]",
+      "verificationMethod": "test",
+      "tests": ["safety::tests::protect_and_unwrap"],
+      "asil": "ASIL-B"
+    },
+    {
+      "id": "LLR-SAFETY-001-2",
+      "title": "CRC is stored little-endian in header bytes 8–9",
+      "hlr": "REQ-SAFETY-001",
+      "description": "The 16-bit CRC value shall be written to bytes 8–9 of the header using `u16::to_le_bytes()`.",
+      "rationale": "Consistent endianness ensures interoperability between any sender/receiver pair on the bus.",
+      "implementation": "src/safety/mod.rs — `build_header()` hdr[8..10]",
+      "verificationMethod": "test",
+      "tests": ["safety::tests::protect_and_unwrap", "integration_test::safety_crc_known_vector"],
+      "asil": "ASIL-B"
+    },
+    {
+      "id": "LLR-SAFETY-002-1",
+      "title": "Sequence counter is stored little-endian in header bytes 4–7",
+      "hlr": "REQ-SAFETY-002",
+      "description": "The 32-bit sequence counter shall be written to bytes 4–7 of the header using `u32::to_le_bytes()`.",
+      "rationale": "Fixed offset and endianness allows the receiver to extract the counter without configuration.",
+      "implementation": "src/safety/mod.rs — `build_header()` hdr[4..8]",
+      "verificationMethod": "test",
+      "tests": ["safety::tests::sequence_counter_increments"],
+      "asil": "ASIL-B"
+    },
+    {
+      "id": "LLR-SAFETY-003-1",
+      "title": "Sequence counter uses fetch_add with SeqCst ordering",
+      "hlr": "REQ-SAFETY-003",
+      "description": "`Protector::protect()` shall increment the sequence counter using `AtomicU32::fetch_add(1, Ordering::SeqCst)` to ensure correct ordering under concurrent calls from multiple threads.",
+      "rationale": "ISO 26262 ASIL-B requires safe concurrent access; SeqCst ordering prevents counter reuse due to reordering.",
+      "implementation": "src/safety/mod.rs — `Protector::protect()` line with `self.seq.fetch_add`",
+      "verificationMethod": "test",
+      "tests": ["integration_test::concurrent_senders_no_panic"],
+      "asil": "ASIL-B"
+    },
+    {
+      "id": "LLR-SAFETY-004-1",
+      "title": "CRC check uses recomputed CRC, not a stored value",
+      "hlr": "REQ-SAFETY-004",
+      "description": "`Receiver::unwrap()` shall rebuild the expected header using the received DataID, SourceID, and sequence counter (with CRC slot = 0), then compute the CRC independently. It shall compare this freshly computed CRC against the header's CRC field — never cache or trust a previously computed CRC.",
+      "rationale": "Ensures the CRC check cannot be bypassed by replaying a frame with a cached CRC.",
+      "implementation": "src/safety/mod.rs — `Receiver::unwrap()` calls `build_header()` with received seq",
+      "verificationMethod": "test",
+      "tests": ["safety::tests::crc_mismatch_detected"],
+      "asil": "ASIL-B"
+    },
+    {
+      "id": "LLR-SAFETY-005-1",
+      "title": "first-frame flag prevents false SequenceGap on initial receive",
+      "hlr": "REQ-SAFETY-005",
+      "description": "`ReceiverState.first` shall be initialised `true` and cleared after the first successfully validated frame. The sequence gap check shall be skipped when `first == true`.",
+      "rationale": "The receiver cannot know the sender's initial counter value; treating any first frame's counter as the baseline avoids a spurious SequenceGap error on startup.",
+      "implementation": "src/safety/mod.rs — `ReceiverState.first` flag in `Receiver::unwrap()`",
+      "verificationMethod": "test",
+      "tests": ["safety::tests::sequence_counter_increments"],
+      "asil": "ASIL-B"
+    },
+    {
+      "id": "LLR-SAFETY-005-2",
+      "title": "Sequence counter gap updates last_seq even when rejecting the frame",
+      "hlr": "REQ-SAFETY-005",
+      "description": "When a sequence gap is detected, `Receiver::unwrap()` shall update `last_seq` to the received counter before returning the error, so that subsequent frames are evaluated against the latest observed counter.",
+      "rationale": "Prevents a single dropped frame from causing all subsequent frames to also be rejected.",
+      "implementation": "src/safety/mod.rs — `Receiver::unwrap()` gap block: `state.last_seq = seq` before returning Err",
+      "verificationMethod": "test",
+      "tests": ["safety::tests::sequence_gap_detected"],
+      "asil": "ASIL-B"
+    },
+    {
+      "id": "LLR-SAFETY-006-1",
+      "title": "HeaderTooShort check occurs before any slice indexing",
+      "hlr": "REQ-SAFETY-006",
+      "description": "The length guard in `Receiver::unwrap()` shall be the first operation before any byte access into the data slice, to prevent out-of-bounds panics.",
+      "rationale": "A panic in an ASIL-B function would constitute an uncontrolled failure; the guard must be unconditional.",
+      "implementation": "src/safety/mod.rs — `Receiver::unwrap()`: first `if data.len() < HEADER_SIZE` block",
+      "verificationMethod": "test",
+      "tests": ["safety::tests::header_too_short_detected"],
+      "asil": "ASIL-B"
+    }
+  ]
+}

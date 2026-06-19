@@ -134,6 +134,16 @@
       "verificationMethod": "test"
     },
     {
+      "id": "REQ-CAN-015",
+      "title": "Convert CLI command",
+      "text": "The CLI binary shall implement a convert subcommand per RELAY spec \u00a711.2: read a can.Frame JSON object from stdin, convert it via to_message(), and write the relay.Message JSON on stdout; exit 0 on success, 1 on invalid input, 2 on invalid protocol.",
+      "standard": "iso26262",
+      "level": "HLR",
+      "asil": "QM",
+      "parent": "REQ-CAN-007",
+      "verificationMethod": "test"
+    },
+    {
       "id": "REQ-VIRT-001",
       "title": "Virtual bus creation",
       "text": "VirtualBus::new() shall succeed without any OS or hardware dependencies (pure in-process).",

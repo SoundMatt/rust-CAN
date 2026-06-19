@@ -268,6 +268,8 @@ fn cmd_status(format: OutputFormat) -> Result<i32, Box<dyn std::error::Error>> {
 // send
 // ---------------------------------------------------------------------------
 
+//fusa:req REQ-CAN-003
+//fusa:req REQ-CAN-004
 /// `rust-can send --iface <name> --id <uint> --data <hex> [--fd] [--ext] [--xl ...]`
 #[allow(clippy::too_many_arguments)]
 async fn cmd_send(
@@ -328,6 +330,7 @@ async fn cmd_send(
 // subscribe
 // ---------------------------------------------------------------------------
 
+//fusa:req REQ-CAN-003
 /// `rust-can subscribe --iface <name> [--count N] [--format text|json]`
 async fn cmd_subscribe(
     _iface: String,
@@ -396,6 +399,9 @@ async fn cmd_subscribe(
 // convert  (RELAY spec §11.2)
 // ---------------------------------------------------------------------------
 
+//fusa:req REQ-CAN-007
+//fusa:req REQ-CAN-015
+//fusa:req REQ-SEC-001
 /// `rust-can convert --protocol CAN [--format json]`
 ///
 /// Reads a `can.Frame` JSON object from stdin, converts it through

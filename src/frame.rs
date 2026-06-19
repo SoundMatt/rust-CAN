@@ -485,6 +485,21 @@ mod tests {
         ));
     }
 
+    //fusa:test REQ-CAN-013
+    #[test]
+    fn xl_data_too_large() {
+        let f = Frame {
+            id: 0x100,
+            xl: true,
+            data: vec![0u8; 2049],
+            ..Default::default()
+        };
+        assert!(matches!(
+            validate_frame(&f),
+            Err(Error::InvalidFrame { .. })
+        ));
+    }
+
     #[test]
     fn esi_without_fd_rejected() {
         let f = Frame {

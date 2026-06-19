@@ -905,6 +905,94 @@ fn sec_message_authenticator_trait_is_object_safe() {
 }
 
 // ---------------------------------------------------------------------------
+// Base64 JSON serialization (RELAY spec §15.1)
+// ---------------------------------------------------------------------------
+
+//fusa:test REQ-CAN-007
+//fusa:test REQ-CAN-016
+#[test]
+fn frame_data_round_trips_as_base64_json() {
+    let frame = Frame {
+        id: 291,
+        data: vec![0xDE, 0xAD, 0xBE, 0xEF],
+        ..Default::default()
+    };
+    let json = serde_json::to_string(&frame).unwrap();
+    // data must be base64 string, NOT a byte array.
+    assert!(
+        json.contains("\"3q2+7w==\""),
+        "data field must be base64: {}",
+        json
+    );
+    let decoded: Frame = serde_json::from_str(&json).unwrap();
+    assert_eq!(decoded.data, frame.data);
+}
+
+// ---------------------------------------------------------------------------
+// RELAY golden vector conformance (REQ-CAN-016)
+// ---------------------------------------------------------------------------
+
+#[derive(serde::Deserialize)]
+struct GoldenVector {
+    value: Frame,
+    message: rust_can::relay::Message,
+}
+
+#[derive(serde::Deserialize)]
+struct ErrorVector {
+    value: Frame,
+}
+
+//fusa:test REQ-CAN-007
+//fusa:test REQ-CAN-016
+#[test]
+fn relay_golden_vectors_valid() {
+    use rust_can::{to_message, validate_frame};
+
+    let vectors = [
+        include_str!("../testdata/relay-vectors/can-standard-frame.json"),
+        include_str!("../testdata/relay-vectors/can-fd-extended-frame.json"),
+        include_str!("../testdata/relay-vectors/can-xl-frame.json"),
+    ];
+
+    for raw in &vectors {
+        let v: GoldenVector = serde_json::from_str(raw).expect("parse golden vector");
+        validate_frame(&v.value).expect("golden frame must be valid");
+
+        let mut msg = to_message(&v.value);
+        // Zero timestamp — convert command zeroes it per spec §11.2.
+        msg.timestamp = chrono::DateTime::UNIX_EPOCH;
+
+        assert_eq!(msg.protocol, v.message.protocol, "protocol mismatch");
+        assert_eq!(msg.id, v.message.id, "id mismatch");
+        assert_eq!(msg.payload, v.message.payload, "payload mismatch");
+        assert_eq!(msg.meta, v.message.meta, "meta mismatch");
+    }
+}
+
+//fusa:sec-test REQ-SEC-001
+//fusa:test REQ-CAN-016
+#[test]
+fn relay_golden_vectors_errors() {
+    use rust_can::validate_frame;
+
+    let vectors = [
+        include_str!("../testdata/relay-vectors/errors/can-fd-xl-mutually-exclusive.json"),
+        include_str!("../testdata/relay-vectors/errors/can-rtr-with-fd.json"),
+        include_str!("../testdata/relay-vectors/errors/can-standard-id-overflow.json"),
+        include_str!("../testdata/relay-vectors/errors/can-xl-priority-id-overflow.json"),
+    ];
+
+    for raw in &vectors {
+        let v: ErrorVector = serde_json::from_str(raw).expect("parse error vector");
+        assert!(
+            validate_frame(&v.value).is_err(),
+            "error vector must be rejected"
+        );
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Convert CLI command (REQ-CAN-015 / RELAY spec §11.2)
 // ---------------------------------------------------------------------------
 

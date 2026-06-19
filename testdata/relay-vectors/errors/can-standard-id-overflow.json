@@ -1,0 +1,11 @@
+{
+    "name": "can-standard-id-overflow",
+    "description": "Standard (non-extended) CAN ID exceeds the 11-bit maximum 0x7FF",
+    "type": "can.Frame",
+    "kind": "error",
+    "value": {
+        "id": 2048,
+        "data": "AA=="
+    },
+    "error": "ErrInvalidFrame"
+}

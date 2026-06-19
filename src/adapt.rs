@@ -24,6 +24,7 @@ use crate::relay::{BackPressurePolicy, Context, Message, Protocol, SubscriberOpt
 
 /// Convert a CAN Frame to a relay::Message per RELAY spec §15.7.1.
 //fusa:req REQ-CAN-007
+//fusa:req REQ-CAN-016
 pub fn to_message(f: &Frame) -> Message {
     let mut meta = std::collections::HashMap::new();
     meta.insert("can.ext".into(), f.ext.to_string());
@@ -35,6 +36,18 @@ pub fn to_message(f: &Frame) -> Message {
     }
     if f.xl {
         meta.insert("can.xl".into(), "true".into());
+        if f.sdt != 0 {
+            meta.insert("can.sdt".into(), f.sdt.to_string());
+        }
+        if f.vcid != 0 {
+            meta.insert("can.vcid".into(), f.vcid.to_string());
+        }
+        if f.af != 0 {
+            meta.insert("can.af".into(), f.af.to_string());
+        }
+        if f.sec {
+            meta.insert("can.sec".into(), "true".into());
+        }
     }
 
     Message {
@@ -63,6 +76,22 @@ pub fn from_message(m: &Message) -> Result<Frame, Error> {
     let brs = m.meta.get("can.brs").map(|v| v == "true").unwrap_or(false);
     let esi = m.meta.get("can.esi").map(|v| v == "true").unwrap_or(false);
     let xl = m.meta.get("can.xl").map(|v| v == "true").unwrap_or(false);
+    let sdt: u8 = m
+        .meta
+        .get("can.sdt")
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(0);
+    let vcid: u8 = m
+        .meta
+        .get("can.vcid")
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(0);
+    let af: u32 = m
+        .meta
+        .get("can.af")
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(0);
+    let sec = m.meta.get("can.sec").map(|v| v == "true").unwrap_or(false);
 
     Ok(Frame {
         id,
@@ -72,8 +101,11 @@ pub fn from_message(m: &Message) -> Result<Frame, Error> {
         brs,
         esi,
         xl,
+        sdt,
+        vcid,
+        af,
+        sec,
         data: m.payload.clone(),
-        ..Default::default()
     })
 }
 

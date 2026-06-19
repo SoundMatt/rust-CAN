@@ -144,6 +144,16 @@
       "verificationMethod": "test"
     },
     {
+      "id": "REQ-CAN-016",
+      "title": "Golden vector conformance",
+      "text": "The RELAY adapter shall produce relay.Message JSON that exactly matches the canonical golden vectors in testdata/relay-vectors/ for all CAN frame types (classic, FD, XL), and shall reject all error vectors with Error::InvalidFrame.",
+      "standard": "iso26262",
+      "level": "HLR",
+      "asil": "QM",
+      "parent": "REQ-CAN-007",
+      "verificationMethod": "test"
+    },
+    {
       "id": "REQ-VIRT-001",
       "title": "Virtual bus creation",
       "text": "VirtualBus::new() shall succeed without any OS or hardware dependencies (pure in-process).",

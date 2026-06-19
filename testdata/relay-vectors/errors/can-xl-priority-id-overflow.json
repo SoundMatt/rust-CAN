@@ -1,0 +1,12 @@
+{
+    "name": "can-xl-priority-id-overflow",
+    "description": "CAN XL uses an 11-bit Priority ID; an ID above 0x7FF is a structural violation",
+    "type": "can.Frame",
+    "kind": "error",
+    "value": {
+        "id": 2048,
+        "xl": true,
+        "data": "AA=="
+    },
+    "error": "ErrInvalidFrame"
+}

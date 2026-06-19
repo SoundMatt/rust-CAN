@@ -1,0 +1,13 @@
+{
+    "name": "can-fd-xl-mutually-exclusive",
+    "description": "FD and XL are distinct CAN frame formats; setting both is a structural violation",
+    "type": "can.Frame",
+    "kind": "error",
+    "value": {
+        "id": 256,
+        "fd": true,
+        "xl": true,
+        "data": "AA=="
+    },
+    "error": "ErrInvalidFrame"
+}

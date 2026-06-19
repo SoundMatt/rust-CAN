@@ -31,7 +31,7 @@
     {
       "id": "REQ-CAN-004",
       "title": "Frame validation",
-      "text": "The system shall validate CAN frames per RELAY spec §15.1 before any transmission; validation shall be performed in validate_frame() and called by every transport send path.",
+      "text": "The system shall validate CAN frames per RELAY spec \u00a715.1 before any transmission; validation shall be performed in validate_frame() and called by every transport send path.",
       "standard": "iso26262",
       "level": "HLR",
       "asil": "ASIL-B",
@@ -181,7 +181,7 @@
     {
       "id": "REQ-ISOTP-001",
       "title": "Single frame",
-      "text": "IsoTpConn.send() shall transmit payloads of 1–7 bytes in a single CAN frame with PCI byte N_PCI=0x0N.",
+      "text": "IsoTpConn.send() shall transmit payloads of 1\u20137 bytes in a single CAN frame with PCI byte N_PCI=0x0N.",
       "standard": "iso26262",
       "level": "HLR",
       "asil": "QM",
@@ -226,7 +226,7 @@
     {
       "id": "REQ-J1939-001",
       "title": "29-bit ID decode",
-      "text": "decode_id() shall extract priority (bits 28–26), data page (bit 24), PDU Format (bits 23–16), PDU Specific (bits 15–8), and source address (bits 7–0) from a 29-bit extended CAN ID.",
+      "text": "decode_id() shall extract priority (bits 28\u201326), data page (bit 24), PDU Format (bits 23\u201316), PDU Specific (bits 15\u20138), and source address (bits 7\u20130) from a 29-bit extended CAN ID.",
       "standard": "iso26262",
       "level": "HLR",
       "asil": "QM",
@@ -351,12 +351,13 @@
     },
     {
       "id": "REQ-SEC-001",
-      "title": "Frame ID bounds — injection prevention",
+      "title": "Frame ID bounds \u2014 injection prevention",
       "text": "All external CAN frame IDs received from untrusted sources shall be validated by validate_frame() before processing; frames with out-of-range IDs shall be rejected with Error::InvalidFrame and shall not be forwarded to any subscriber.",
       "standard": "iso26262",
       "level": "HLR",
       "asil": "ASIL-B",
-      "verificationMethod": "sec-test"
+      "verificationMethod": "sec-test",
+      "cal": "CAL-3"
     },
     {
       "id": "REQ-SEC-002",
@@ -365,7 +366,8 @@
       "standard": "iso26262",
       "level": "HLR",
       "asil": "ASIL-B",
-      "verificationMethod": "sec-test"
+      "verificationMethod": "sec-test",
+      "cal": "CAL-3"
     },
     {
       "id": "REQ-SEC-003",
@@ -374,7 +376,8 @@
       "standard": "iso26262",
       "level": "HLR",
       "asil": "ASIL-B",
-      "verificationMethod": "sec-test"
+      "verificationMethod": "sec-test",
+      "cal": "CAL-3"
     },
     {
       "id": "REQ-SEC-004",
@@ -383,7 +386,8 @@
       "standard": "iso26262",
       "level": "HLR",
       "asil": "ASIL-A",
-      "verificationMethod": "sec-test"
+      "verificationMethod": "sec-test",
+      "cal": "CAL-2"
     },
     {
       "id": "REQ-SEC-005",
@@ -392,7 +396,39 @@
       "standard": "iso26262",
       "level": "HLR",
       "asil": "QM",
+      "verificationMethod": "sec-test",
+      "cal": "CAL-2"
+    },
+    {
+      "id": "REQ-SEC-006",
+      "title": "Cryptographic message authentication interface",
+      "text": "The safety module SHALL expose a MessageAuthenticator trait that callers can implement using HMAC-SHA256 or AES-CMAC. The E2E CRC-16 layer MUST be documented as a safety control only (random error detection); it SHALL NOT be represented as a security control against adversarial forgery. Applications operating at IEC 62443 SL-2 or ISO/SAE 21434 CAL-3 SHALL use a keyed MAC in addition to CRC-16.",
+      "standard": "iso26262",
+      "level": "HLR",
+      "asil": "ASIL-B",
+      "cal": "CAL-3",
+      "verificationMethod": "inspection",
+      "rationale": "CRC-16 has no keying material; an adversary who observes frames can forge a valid CRC (T-CAN-02, T-CAN-05). A trait-based interface allows callers to plug in HMAC without adding a crypto dependency to rust-CAN itself."
+    },
+    {
+      "id": "REQ-SEC-007",
+      "title": "Per-subscriber frame rate limiting",
+      "text": "When SubscriberOptions.rate_limit_per_sec is non-zero, the bus SHALL drop frames delivered to that subscriber that exceed the configured rate within any 1-second window. Dropped frames SHALL be counted in the bus drop_count metric. This provides defence-in-depth against frame-flooding DoS attacks (T-CAN-07).",
+      "standard": "iso26262",
+      "level": "HLR",
+      "asil": "ASIL-A",
+      "cal": "CAL-3",
       "verificationMethod": "sec-test"
+    },
+    {
+      "id": "REQ-SEC-008",
+      "title": "Bus-off state detection and exposure",
+      "text": "The bus implementation SHALL detect CAN controller bus-off conditions and return Error::BusOff to the caller. The application SHALL be notified so it can implement a recovery policy (e.g., bus reset, watchdog trigger). Bus-off recovery itself is out of scope for the library.",
+      "standard": "iso26262",
+      "level": "HLR",
+      "asil": "ASIL-A",
+      "cal": "CAL-3",
+      "verificationMethod": "inspection"
     }
   ]
 }

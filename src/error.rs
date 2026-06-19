@@ -38,6 +38,13 @@ pub enum Error {
     #[error("can: invalid frame: {reason}")]
     InvalidFrame { reason: String },
 
+    /// CAN controller entered bus-off state due to excessive transmit errors.
+    ///
+    /// The application must reinitialise or reset the bus to recover.
+    //fusa:req REQ-SEC-008
+    #[error("can: bus-off")]
+    BusOff,
+
     /// Generic CAN error with a message string.
     #[error("can: {0}")]
     Other(String),

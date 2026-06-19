@@ -648,6 +648,7 @@ async fn back_pressure_drop_oldest() {
             SubscriberOptions {
                 channel_depth: 2,
                 back_pressure: BackPressurePolicy::DropOldest,
+                rate_limit_per_sec: 0,
             },
         )
         .await
@@ -792,4 +793,103 @@ fn sec_dbc_parse_no_panic_on_malformed_input() {
         // Must not panic — result may be Ok or Err, but never a panic
         let _ = parse(input);
     }
+}
+
+// ---------------------------------------------------------------------------
+// Rate limiting (REQ-SEC-007)
+// ---------------------------------------------------------------------------
+
+//fusa:sec-test REQ-SEC-007
+#[tokio::test]
+async fn sec_rate_limit_drops_excess_frames() {
+    let bus = Arc::new(VirtualBus::new());
+    let rx = bus
+        .subscribe(
+            vec![],
+            SubscriberOptions {
+                channel_depth: 64,
+                back_pressure: BackPressurePolicy::DropNewest,
+                rate_limit_per_sec: 3,
+            },
+        )
+        .await
+        .unwrap();
+
+    // Send 10 frames rapidly — only the first 3 should be accepted in the window.
+    for i in 0u32..10 {
+        let _ = bus
+            .send(
+                Context::background(),
+                Frame {
+                    id: i & 0x7FF,
+                    data: vec![i as u8],
+                    ..Default::default()
+                },
+            )
+            .await;
+    }
+
+    // Drain what was accepted.
+    let mut count = 0usize;
+    while let Ok(Some(_)) =
+        tokio::time::timeout(std::time::Duration::from_millis(10), rx.recv()).await
+    {
+        count += 1;
+    }
+    assert!(
+        count <= 3,
+        "rate limit of 3/s must drop excess frames; got {}",
+        count
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Bus-off error exposure (REQ-SEC-008)
+// ---------------------------------------------------------------------------
+
+//fusa:sec-test REQ-SEC-008
+#[test]
+fn sec_bus_off_error_is_distinct() {
+    // Error::BusOff must be distinct from Closed/Timeout so callers can
+    // implement correct recovery policies.
+    let e = rust_can::Error::BusOff;
+    assert!(e.kind().is_none()); // not a RELAY sentinel
+    assert_eq!(e.to_string(), "can: bus-off");
+    assert!(!matches!(e, rust_can::Error::Closed));
+    assert!(!matches!(e, rust_can::Error::Timeout));
+}
+
+// ---------------------------------------------------------------------------
+// MessageAuthenticator trait (REQ-SEC-006)
+// ---------------------------------------------------------------------------
+
+//fusa:sec-test REQ-SEC-006
+#[test]
+fn sec_message_authenticator_trait_is_object_safe() {
+    use rust_can::safety::MessageAuthenticator;
+
+    // Verify the trait is object-safe by constructing a dyn reference.
+    struct NullAuth;
+    impl MessageAuthenticator for NullAuth {
+        fn sign(&self, _key: &[u8], data: &[u8]) -> Vec<u8> {
+            // NOT a real MAC — for structural test only.
+            data.iter().fold(0u8, |acc, &b| acc.wrapping_add(b)).to_le_bytes().to_vec()
+        }
+        fn verify(&self, key: &[u8], data: &[u8], tag: &[u8]) -> bool {
+            self.sign(key, data) == tag
+        }
+        fn tag_len(&self) -> usize { 1 }
+    }
+
+    let auth: &dyn MessageAuthenticator = &NullAuth;
+    let key = b"test-key";
+    let data = b"safety-critical-payload";
+    let tag = auth.sign(key, data);
+    assert_eq!(tag.len(), auth.tag_len());
+    assert!(auth.verify(key, data, &tag));
+
+    // Tampered data must not verify.
+    let mut bad = data.to_vec();
+    bad[0] ^= 0x01;
+    assert!(!auth.verify(key, &bad, &tag));
 }

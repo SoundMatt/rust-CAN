@@ -176,7 +176,7 @@ impl Bus for VirtualBus {
 
         let depth = opts.chan_depth(64);
         let policy = opts.back_pressure;
-        let sub_inner = Arc::new(SubInner::new(depth, policy));
+        let sub_inner = Arc::new(SubInner::new(depth, policy, opts.rate_limit_per_sec));
         let rx = FrameReceiver {
             inner: sub_inner.clone(),
         };
@@ -399,6 +399,7 @@ mod tests {
                 SubscriberOptions {
                     channel_depth: 2,
                     back_pressure: BackPressurePolicy::DropNewest,
+                    rate_limit_per_sec: 0,
                 },
             )
             .await

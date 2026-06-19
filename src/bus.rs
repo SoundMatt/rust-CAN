@@ -10,6 +10,7 @@
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
+use std::time::Instant;
 
 use async_trait::async_trait;
 use tokio::sync::Notify;
@@ -22,6 +23,11 @@ use crate::relay::{BackPressurePolicy, Context, Health, Metrics, SubscriberOptio
 // SubInner — shared subscriber queue
 // ---------------------------------------------------------------------------
 
+struct RateState {
+    window_start: Instant,
+    count: u32,
+}
+
 /// Inner shared state for a subscriber channel.
 ///
 /// Uses `std::sync::Mutex` for the queue so it can be locked briefly from
@@ -32,24 +38,46 @@ pub(crate) struct SubInner {
     pub(crate) policy: BackPressurePolicy,
     pub(crate) notify: Notify,
     pub(crate) closed: AtomicBool,
+    /// 0 = unlimited; >0 = max frames accepted per second (REQ-SEC-007).
+    rate_limit: u32,
+    rate_state: Mutex<RateState>,
 }
 
 impl SubInner {
-    pub(crate) fn new(capacity: usize, policy: BackPressurePolicy) -> Self {
+    pub(crate) fn new(capacity: usize, policy: BackPressurePolicy, rate_limit: u32) -> Self {
         Self {
             queue: Mutex::new(VecDeque::with_capacity(capacity.min(256))),
             capacity,
             policy,
             notify: Notify::new(),
             closed: AtomicBool::new(false),
+            rate_limit,
+            rate_state: Mutex::new(RateState {
+                window_start: Instant::now(),
+                count: 0,
+            }),
         }
     }
 
     /// Push a frame into the queue, applying the back-pressure policy.
     ///
     /// Returns `true` if the frame was accepted (delivered), `false` if it
-    /// was dropped.
+    /// was dropped (capacity or rate limit exceeded).
     pub(crate) fn push(&self, frame: Frame) -> bool {
+        // Rate-limit check: sliding 1-second window.
+        if self.rate_limit > 0 {
+            let mut rs = self.rate_state.lock().unwrap();
+            let now = Instant::now();
+            if now.duration_since(rs.window_start).as_secs() >= 1 {
+                rs.window_start = now;
+                rs.count = 0;
+            }
+            if rs.count >= self.rate_limit {
+                return false;
+            }
+            rs.count += 1;
+        }
+
         let mut q = self.queue.lock().unwrap();
         match self.policy {
             BackPressurePolicy::DropNewest => {
@@ -216,7 +244,7 @@ mod tests {
 
     #[tokio::test]
     async fn sub_inner_push_pop() {
-        let inner = SubInner::new(4, BackPressurePolicy::DropNewest);
+        let inner = SubInner::new(4, BackPressurePolicy::DropNewest, 0);
         let f = Frame {
             id: 0x100,
             data: vec![1, 2],
@@ -229,7 +257,7 @@ mod tests {
 
     #[tokio::test]
     async fn sub_inner_drop_newest() {
-        let inner = SubInner::new(2, BackPressurePolicy::DropNewest);
+        let inner = SubInner::new(2, BackPressurePolicy::DropNewest, 0);
         let f1 = Frame {
             id: 1,
             ..Default::default()
@@ -254,7 +282,7 @@ mod tests {
 
     #[tokio::test]
     async fn sub_inner_drop_oldest() {
-        let inner = SubInner::new(2, BackPressurePolicy::DropOldest);
+        let inner = SubInner::new(2, BackPressurePolicy::DropOldest, 0);
         let f1 = Frame {
             id: 1,
             ..Default::default()
@@ -278,7 +306,7 @@ mod tests {
 
     #[tokio::test]
     async fn frame_receiver_recv_and_close() {
-        let inner = Arc::new(SubInner::new(4, BackPressurePolicy::DropNewest));
+        let inner = Arc::new(SubInner::new(4, BackPressurePolicy::DropNewest, 0));
         let rx = FrameReceiver {
             inner: inner.clone(),
         };

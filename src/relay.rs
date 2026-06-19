@@ -155,6 +155,12 @@ pub struct SubscriberOptions {
     pub channel_depth: usize,
     /// Back-pressure policy applied when the channel is full.
     pub back_pressure: BackPressurePolicy,
+    /// Maximum frames per second this subscriber will accept; 0 = unlimited.
+    ///
+    /// Frames arriving faster than the limit are silently dropped and counted
+    /// in the bus drop_count metric. This is a defence-in-depth control against
+    /// frame-flooding DoS attacks (REQ-SEC-007).
+    pub rate_limit_per_sec: u32,
 }
 
 impl SubscriberOptions {

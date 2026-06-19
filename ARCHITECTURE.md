@@ -141,7 +141,36 @@ compiler statically guarantees the absence of data races across these boundaries
 
 ---
 
-## 8. Known Architectural Constraints
+## 8. Security Architecture
+
+### 8.1 Threat boundary
+
+rust-CAN is a library, not a standalone system. The threat boundary is the CAN bus interface — all frames arriving from the bus are treated as potentially attacker-controlled until validated by `validate_frame()` and (optionally) the E2E layer.
+
+### 8.2 Security control mapping
+
+| Threat (tara.json) | Module | Control |
+|---|---|---|
+| T-CAN-01: frame injection | `frame` | `validate_frame()` gates every send path |
+| T-CAN-02: payload tampering | `safety` | CRC-16 (safety); `MessageAuthenticator` trait (security) |
+| T-CAN-03: replay | `safety` | 32-bit monotonic sequence counter in E2E header |
+| T-CAN-04: bus-off DoS | `error`, `socketcan` | `Error::BusOff` exposed; recovery is application responsibility |
+| T-CAN-05: node impersonation | `safety` | `MessageAuthenticator` trait (caller provides keyed MAC) |
+| T-CAN-06: eavesdropping | — | **Risk accepted** — CAN is broadcast; no encryption in scope |
+| T-CAN-07: frame flooding | `bus` | `SubscriberOptions::rate_limit_per_sec` enforced in `SubInner::push()` |
+| T-CAN-08: ISO-TP exhaustion | `isotp` | `tokio::time::timeout` on all waits |
+| T-CAN-09: DBC crash | `dbc` | All parse paths return `Err`; no `unwrap()` on external input |
+
+### 8.3 CRC-16 scope boundary
+
+The CRC-16/CCITT-FALSE in the `safety` module is an **ISO 26262 safety** control, not an **ISO/SAE 21434 security** control. The distinction:
+
+- **Safety** (random faults): CRC-16 has Hamming distance ≥ 4 for messages ≤ 32767 bits. Satisfies ASIL-B requirements for E2E protection.
+- **Security** (adversarial forgery): CRC-16 has no keying material. An observer can compute a valid CRC for any forged payload. Does NOT satisfy CAL-3.
+
+For security-level integrity, callers must implement `safety::MessageAuthenticator` using HMAC-SHA256 (≥ 256-bit key) or AES-128-CMAC with an HSM-managed key.
+
+## 9. Known Architectural Constraints
 
 1. **SocketCAN is Linux-only.** macOS and Windows builds exclude `socketcan` and `libc`
    dependencies via `cfg(target_os = "linux")`.

@@ -132,6 +132,7 @@ impl crate::relay::Node for CanAdapter {
                 SubscriberOptions {
                     channel_depth: depth * 2, // give the internal channel more headroom
                     back_pressure: BackPressurePolicy::DropNewest,
+                    rate_limit_per_sec: 0,
                 },
             )
             .await

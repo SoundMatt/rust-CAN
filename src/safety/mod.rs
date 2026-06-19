@@ -26,6 +26,43 @@ use crate::crc::crc16_ccitt_false;
 const HEADER_SIZE: usize = 10;
 
 // ---------------------------------------------------------------------------
+// MessageAuthenticator
+// ---------------------------------------------------------------------------
+
+/// Pluggable cryptographic message authentication interface (REQ-SEC-006).
+///
+/// # Safety vs. Security scope
+///
+/// The `Protector`/`Receiver` pair uses CRC-16/CCITT-FALSE as its integrity
+/// mechanism. CRC-16 is a **safety** control (ISO 26262): it detects random
+/// transmission errors with Hamming distance ≥ 4 for messages up to 32767 bits.
+///
+/// CRC-16 is **not a security control**. An adversary who can observe frames
+/// can trivially compute a valid CRC for any forged payload because there is no
+/// keying material. Applications operating in environments where active
+/// adversaries are a concern (IEC 62443 SL-2 or higher / ISO/SAE 21434 CAL-3)
+/// MUST use a cryptographic MAC in addition to, or instead of, the CRC layer.
+///
+/// Implement this trait using HMAC-SHA256 or AES-CMAC and pass the
+/// authenticator to a `SecureProtector`/`SecureReceiver` (future extension).
+/// The tag returned by `sign()` should be appended after the E2E header and
+/// before the payload.
+//fusa:req REQ-SEC-006
+pub trait MessageAuthenticator: Send + Sync {
+    /// Compute a MAC tag over `data` using `key`.
+    fn sign(&self, key: &[u8], data: &[u8]) -> Vec<u8>;
+
+    /// Verify that `tag` is a valid MAC for `data` under `key`.
+    ///
+    /// Implementations MUST use a constant-time comparison to prevent
+    /// timing side-channels.
+    fn verify(&self, key: &[u8], data: &[u8], tag: &[u8]) -> bool;
+
+    /// Length of the tag produced by `sign()` in bytes.
+    fn tag_len(&self) -> usize;
+}
+
+// ---------------------------------------------------------------------------
 // Config
 // ---------------------------------------------------------------------------
 

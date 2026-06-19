@@ -154,6 +154,141 @@
       "verificationMethod": "test"
     },
     {
+      "id": "REQ-REC-001",
+      "title": "Candump record",
+      "text": "record() shall subscribe to a Bus and write each received frame as a candump-format line to the provided writer until the context is cancelled or the bus closes.",
+      "standard": "iso26262",
+      "level": "HLR",
+      "asil": "QM",
+      "verificationMethod": "test"
+    },
+    {
+      "id": "REQ-REC-002",
+      "title": "Candump replay",
+      "text": "replay() shall parse a candump log from a reader and re-send each frame to the Bus, preserving inter-frame timing scaled by speedFactor; malformed lines are skipped silently.",
+      "standard": "iso26262",
+      "level": "HLR",
+      "asil": "QM",
+      "verificationMethod": "test"
+    },
+    {
+      "id": "REQ-REC-003",
+      "title": "Candump line format",
+      "text": "parse_line() shall parse both classic CAN (ID#DATA) and CAN FD (ID##FLAGSDATA) candump lines; format_line() shall produce the matching textual form.",
+      "standard": "iso26262",
+      "level": "HLR",
+      "asil": "QM",
+      "verificationMethod": "test"
+    },
+    {
+      "id": "REQ-OBD-001",
+      "title": "OBD-II client",
+      "text": "Client::new() shall create an OBD-II client over an IsoTpConn; OBD-II uses fixed CAN IDs 0x7DF (request) / 0x7E8 (response).",
+      "standard": "iso26262",
+      "level": "HLR",
+      "asil": "QM",
+      "verificationMethod": "test"
+    },
+    {
+      "id": "REQ-OBD-002",
+      "title": "OBD-II PID read",
+      "text": "read_pid() shall send a Mode 01 request and return the decoded Value; it shall return an error for negative responses or malformed replies.",
+      "standard": "iso26262",
+      "level": "HLR",
+      "asil": "QM",
+      "verificationMethod": "test"
+    },
+    {
+      "id": "REQ-OBD-003",
+      "title": "OBD-II VIN read",
+      "text": "read_vin() shall send a Mode 09 PID 0x02 request and return the VIN string; it shall return an error for negative responses.",
+      "standard": "iso26262",
+      "level": "HLR",
+      "asil": "QM",
+      "verificationMethod": "test"
+    },
+    {
+      "id": "REQ-UDS-001",
+      "title": "UDS client",
+      "text": "Client::new() shall create a UDS client over an IsoTpConn.",
+      "standard": "iso26262",
+      "level": "HLR",
+      "asil": "QM",
+      "verificationMethod": "test"
+    },
+    {
+      "id": "REQ-UDS-002",
+      "title": "UDS DiagnosticSessionControl",
+      "text": "diagnostic_session_control() shall send SID 0x10 and verify the positive response.",
+      "standard": "iso26262",
+      "level": "HLR",
+      "asil": "QM",
+      "verificationMethod": "test"
+    },
+    {
+      "id": "REQ-UDS-003",
+      "title": "UDS ECUReset",
+      "text": "ecu_reset() shall send SID 0x11 and verify the positive response.",
+      "standard": "iso26262",
+      "level": "HLR",
+      "asil": "QM",
+      "verificationMethod": "test"
+    },
+    {
+      "id": "REQ-UDS-004",
+      "title": "UDS TesterPresent",
+      "text": "tester_present() shall send SID 0x3E 0x00 and verify the positive response.",
+      "standard": "iso26262",
+      "level": "HLR",
+      "asil": "QM",
+      "verificationMethod": "test"
+    },
+    {
+      "id": "REQ-UDS-005",
+      "title": "UDS ReadDataByIdentifier",
+      "text": "read_data_by_identifier() shall send SID 0x22 with the DID and return the payload.",
+      "standard": "iso26262",
+      "level": "HLR",
+      "asil": "QM",
+      "verificationMethod": "test"
+    },
+    {
+      "id": "REQ-UDS-006",
+      "title": "UDS WriteDataByIdentifier",
+      "text": "write_data_by_identifier() shall send SID 0x2E with the DID and data.",
+      "standard": "iso26262",
+      "level": "HLR",
+      "asil": "QM",
+      "verificationMethod": "test"
+    },
+    {
+      "id": "REQ-UDS-007",
+      "title": "UDS SecurityAccess",
+      "text": "security_access() shall send SID 0x27 sub-functions for seed request and key send.",
+      "standard": "iso26262",
+      "level": "HLR",
+      "asil": "QM",
+      "verificationMethod": "test"
+    },
+    {
+      "id": "REQ-UDS-008",
+      "title": "UDS negative response",
+      "text": "request() shall surface NRC 0x78 (response pending) by retrying, and return NegativeResponseError for all other negative responses.",
+      "standard": "iso26262",
+      "level": "HLR",
+      "asil": "QM",
+      "verificationMethod": "test"
+    },
+    {
+      "id": "REQ-UDS-009",
+      "title": "UDS transport",
+      "text": "All UDS requests and responses shall be transported over IsoTpConn (ISO 15765-2).",
+      "standard": "iso26262",
+      "level": "HLR",
+      "asil": "QM",
+      "verificationMethod": "test"
+    },
+    {
       "id": "REQ-VIRT-001",
       "title": "Virtual bus creation",
       "text": "VirtualBus::new() shall succeed without any OS or hardware dependencies (pure in-process).",
@@ -449,6 +584,17 @@
       "asil": "ASIL-A",
       "cal": "CAL-3",
       "verificationMethod": "inspection"
+    },
+    {
+      "id": "REQ-SEND-001",
+      "title": "Streaming JSON send (crossbar spoke)",
+      "text": "The 'send' CLI command SHALL accept '--format json' to read newline-delimited relay.Message JSON objects from stdin and send each frame via from_message() to the bus. When '--format json' is used the '--id' and '--data' flags SHALL be optional. This makes rust-CAN a valid RELAY v1.8 crossbar destination.",
+      "standard": "iso26262",
+      "level": "HLR",
+      "asil": "QM",
+      "cal": "CAL-1",
+      "parent": "REQ-CAN-003",
+      "verificationMethod": "test"
     }
   ]
 }

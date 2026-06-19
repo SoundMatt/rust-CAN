@@ -5,12 +5,13 @@
 
 //! rust-can CLI binary — RELAY spec §11 conformant command surface.
 
+use std::io::BufRead;
 use std::sync::Arc;
 
 use clap::{Parser, Subcommand, ValueEnum};
 use serde_json::json;
 
-use rust_can::relay::{Context, Protocol, SubscriberOptions};
+use rust_can::relay::{Context, Message, Protocol, SubscriberOptions};
 use rust_can::virtual_bus::VirtualBus;
 use rust_can::{Bus, Frame};
 
@@ -49,16 +50,20 @@ enum Commands {
     },
 
     /// Send a CAN frame via the virtual bus.
+    ///
+    /// Use --format json to read newline-delimited relay.Message JSON from stdin
+    /// (crossbar destination mode, RELAY v1.8 §send). In that mode --id and
+    /// --data are ignored.
     Send {
         /// Network interface name (informational — uses virtual bus).
         #[arg(long)]
         iface: String,
-        /// CAN frame ID (decimal or hex with 0x prefix).
+        /// CAN frame ID (decimal or hex with 0x prefix). Optional when --format json.
         #[arg(long)]
-        id: String,
-        /// Frame data as hex string (e.g. DEADBEEF).
+        id: Option<String>,
+        /// Frame data as hex string (e.g. DEADBEEF). Optional when --format json.
         #[arg(long)]
-        data: String,
+        data: Option<String>,
         /// Send as CAN FD frame.
         #[arg(long)]
         fd: bool,
@@ -80,6 +85,10 @@ enum Commands {
         /// CAN XL Simple Extended Content flag (XL only).
         #[arg(long)]
         sec: bool,
+        /// Input format: 'text' (default, uses --id/--data) or 'json' (reads
+        /// NDJSON relay.Message from stdin).
+        #[arg(long, value_enum, default_value = "text")]
+        format: OutputFormat,
     },
 
     /// Subscribe to CAN frames on the virtual bus.
@@ -153,7 +162,8 @@ async fn run(cli: Cli) -> Result<i32, Box<dyn std::error::Error>> {
             vcid,
             af,
             sec,
-        } => cmd_send(iface, id, data, fd, ext, xl, sdt, vcid, af, sec).await,
+            format,
+        } => cmd_send(iface, id, data, fd, ext, xl, sdt, vcid, af, sec, format).await,
         Commands::Subscribe {
             iface,
             count,
@@ -270,12 +280,17 @@ fn cmd_status(format: OutputFormat) -> Result<i32, Box<dyn std::error::Error>> {
 
 //fusa:req REQ-CAN-003
 //fusa:req REQ-CAN-004
-/// `rust-can send --iface <name> --id <uint> --data <hex> [--fd] [--ext] [--xl ...]`
+//fusa:req REQ-SEND-001
+/// `rust-can send --iface <name> [--id <uint>] [--data <hex>] [--format json|text]`
+///
+/// In text mode (default) sends a single frame built from --id/--data flags.
+/// In json mode reads NDJSON relay.Message objects from stdin, converts each
+/// via from_message(), and sends the resulting frame to the virtual bus.
 #[allow(clippy::too_many_arguments)]
 async fn cmd_send(
     _iface: String,
-    id_str: String,
-    data_hex: String,
+    id_str: Option<String>,
+    data_hex: Option<String>,
     fd: bool,
     ext: bool,
     xl: bool,
@@ -283,46 +298,104 @@ async fn cmd_send(
     vcid: u8,
     af: u32,
     sec: bool,
+    format: OutputFormat,
 ) -> Result<i32, Box<dyn std::error::Error>> {
-    // Parse ID (decimal or 0x-prefixed hex).
-    let id: u32 = if id_str.starts_with("0x") || id_str.starts_with("0X") {
-        u32::from_str_radix(&id_str[2..], 16)?
-    } else {
-        id_str.parse()?
-    };
-
-    // Parse data hex.
-    let data = hex::decode(data_hex.replace(' ', ""))?;
-
-    let frame = Frame {
-        id,
-        ext,
-        fd,
-        xl,
-        sdt,
-        vcid,
-        af,
-        sec,
-        data,
-        ..Default::default()
-    };
-
-    // Validate the frame before sending.
-    rust_can::validate_frame(&frame)?;
-
-    // Use virtual bus for the send command.
     let bus = Arc::new(VirtualBus::new());
-    bus.send(Context::background(), frame.clone()).await?;
 
-    println!(
-        "sent: id=0x{:X} ext={} fd={} xl={} data={}",
-        id,
-        ext,
-        fd,
-        xl,
-        hex::encode(&frame.data)
+    match format {
+        OutputFormat::Json => {
+            // Streaming JSON: read NDJSON relay.Message from stdin.
+            cmd_send_json(bus).await
+        }
+        OutputFormat::Text => {
+            // Classic single-frame send from flags.
+            let id_str = id_str.ok_or("rust-can: --id is required in text mode")?;
+            let data_hex = data_hex.ok_or("rust-can: --data is required in text mode")?;
+
+            let id: u32 = if id_str.starts_with("0x") || id_str.starts_with("0X") {
+                u32::from_str_radix(&id_str[2..], 16)?
+            } else {
+                id_str.parse()?
+            };
+
+            let data = hex::decode(data_hex.replace(' ', ""))?;
+
+            let frame = Frame {
+                id,
+                ext,
+                fd,
+                xl,
+                sdt,
+                vcid,
+                af,
+                sec,
+                data,
+                ..Default::default()
+            };
+
+            rust_can::validate_frame(&frame)?;
+            bus.send(Context::background(), frame.clone()).await?;
+
+            println!(
+                "sent: id=0x{:X} ext={} fd={} xl={} data={}",
+                id,
+                ext,
+                fd,
+                xl,
+                hex::encode(&frame.data)
+            );
+
+            Ok(0)
+        }
+    }
+}
+
+//fusa:req REQ-SEND-001
+/// Read NDJSON relay.Message objects from stdin and send each as a CAN frame.
+async fn cmd_send_json(bus: Arc<VirtualBus>) -> Result<i32, Box<dyn std::error::Error>> {
+    let stdin = std::io::stdin();
+    let mut sent = 0usize;
+    let mut errors = 0usize;
+
+    for line in stdin.lock().lines() {
+        let line = line?;
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
+
+        let msg: Message = match serde_json::from_str(line) {
+            Ok(m) => m,
+            Err(e) => {
+                eprintln!("rust-can: send --format json: parse error: {}", e);
+                errors += 1;
+                continue;
+            }
+        };
+
+        let frame = match rust_can::from_message(&msg) {
+            Ok(f) => f,
+            Err(e) => {
+                eprintln!("rust-can: send --format json: conversion error: {}", e);
+                errors += 1;
+                continue;
+            }
+        };
+
+        if let Err(e) = rust_can::validate_frame(&frame) {
+            eprintln!("rust-can: send --format json: invalid frame: {}", e);
+            errors += 1;
+            continue;
+        }
+
+        bus.send(Context::background(), frame).await?;
+        sent += 1;
+    }
+
+    eprintln!(
+        "rust-can: send --format json: sent={} errors={}",
+        sent, errors
     );
-
     Ok(0)
 }
 

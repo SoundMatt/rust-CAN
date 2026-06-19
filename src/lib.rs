@@ -45,8 +45,11 @@ pub mod frame;
 pub mod isotp;
 pub mod j1939;
 pub mod mock;
+pub mod obdii;
+pub mod recorder;
 pub mod relay;
 pub mod safety;
+pub mod uds;
 pub mod virtual_bus;
 
 #[cfg(target_os = "linux")]

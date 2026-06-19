@@ -85,6 +85,9 @@ jobs:
           ./target/release/rust-can convert --protocol LIN </dev/null || lin_ec=$?
           test "$lin_ec" -eq 2 && echo 'convert exit-2 on bad protocol OK' || \
             { echo "FAIL: expected exit 2 on bad protocol, got $lin_ec"; exit 1; }
+          printf '{"protocol":1,"version":{"major":0,"minor":0,"patch":0},"id":"291","payload":"3q2+7w==","timestamp":"1970-01-01T00:00:00Z","meta":{"can.fd":"true","can.brs":"true","can.ext":"false","can.rtr":"false","can.xl":"false"}}\n' \
+            | ./target/release/rust-can send --iface vcan0 --format json
+          echo 'send --format json OK'
 
   # ── ASIL-B safety checks via rust-FuSa ────────────────────────────────────
   safety:

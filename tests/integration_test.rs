@@ -1078,3 +1078,174 @@ fn validate_frame_xl_data_length() {
     })
     .is_err());
 }
+
+// ---------------------------------------------------------------------------
+// Recorder integration
+// ---------------------------------------------------------------------------
+
+//fusa:test REQ-REC-001
+//fusa:test REQ-REC-002
+#[tokio::test]
+async fn recorder_record_and_replay() {
+    use rust_can::recorder;
+
+    let bus = Arc::new(VirtualBus::new());
+
+    // Subscribe before sending so we capture the replayed frame.
+    let rx = bus
+        .subscribe(vec![], SubscriberOptions::default())
+        .await
+        .unwrap();
+
+    // Build a candump log with one frame.
+    let frame = Frame {
+        id: 0x1AB,
+        data: vec![0xCA, 0xFE],
+        ..Default::default()
+    };
+    let ts = std::time::Duration::from_micros(1_000_000_000);
+    let line = recorder::format_line("vcan0", ts, &frame);
+    let log = format!("{}\n", line);
+
+    // Replay the log onto the virtual bus at 1000x speed (no real delay).
+    recorder::replay(bus.clone(), std::io::Cursor::new(log.as_bytes()), 1000.0)
+        .await
+        .unwrap();
+
+    // The replayed frame must arrive on the subscription.
+    let got = rx.recv().await.unwrap();
+    assert_eq!(got.id, frame.id);
+    assert_eq!(got.data, frame.data);
+}
+
+//fusa:test REQ-REC-003
+#[test]
+fn recorder_format_parse_symmetry_standard_and_fd() {
+    use rust_can::recorder;
+
+    let ts = std::time::Duration::from_micros(1_609_459_200_123_456);
+
+    let classic = Frame {
+        id: 0x7FF,
+        data: vec![0xAA, 0xBB, 0xCC, 0xDD],
+        ..Default::default()
+    };
+    let line = recorder::format_line("can0", ts, &classic);
+    let (pt, pf) = recorder::parse_line(&line).unwrap();
+    assert_eq!(pt, ts);
+    assert_eq!(pf.id, classic.id);
+    assert_eq!(pf.data, classic.data);
+    assert!(!pf.fd);
+
+    let fd = Frame {
+        id: 0x123,
+        fd: true,
+        brs: true,
+        data: vec![0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08],
+        ..Default::default()
+    };
+    let line = recorder::format_line("can0", ts, &fd);
+    let (_, pf) = recorder::parse_line(&line).unwrap();
+    assert!(pf.fd);
+    assert!(pf.brs);
+    assert_eq!(pf.data, fd.data);
+}
+
+// ---------------------------------------------------------------------------
+// Streaming send (issue #10 / REQ-SEND-001)
+// ---------------------------------------------------------------------------
+
+//fusa:test REQ-SEND-001
+#[tokio::test]
+async fn streaming_send_json_roundtrip() {
+    use rust_can::{from_message, to_message, validate_frame};
+
+    // Build a relay.Message from a known frame.
+    let frame = Frame {
+        id: 0x291,
+        fd: true,
+        brs: true,
+        data: vec![0xDE, 0xAD, 0xBE, 0xEF],
+        ..Default::default()
+    };
+    let msg = to_message(&frame);
+
+    // Serialize to NDJSON, deserialize, convert back.
+    let ndjson = serde_json::to_string(&msg).unwrap();
+    let parsed_msg: rust_can::relay::Message = serde_json::from_str(&ndjson).unwrap();
+    let recovered = from_message(&parsed_msg).unwrap();
+
+    validate_frame(&recovered).unwrap();
+    assert_eq!(recovered.id, frame.id);
+    assert_eq!(recovered.data, frame.data);
+    assert!(recovered.fd);
+}
+
+// ---------------------------------------------------------------------------
+// OBD-II unit decode (no real ECU needed)
+// ---------------------------------------------------------------------------
+
+//fusa:test REQ-OBD-001
+//fusa:test REQ-OBD-002
+#[test]
+fn obdii_pid_constants_are_correct() {
+    use rust_can::obdii;
+    assert_eq!(obdii::MODE_CURRENT_DATA, 0x01);
+    assert_eq!(obdii::PID_ENGINE_RPM, 0x0C);
+    assert_eq!(obdii::PID_VEHICLE_SPEED, 0x0D);
+    assert_eq!(obdii::PID_COOLANT_TEMP, 0x05);
+    assert_eq!(obdii::PID_VIN, 0x02);
+    assert_eq!(obdii::MODE_VEHICLE_INFO, 0x09);
+}
+
+//fusa:test REQ-OBD-003
+#[test]
+fn obdii_mode_vehicle_info_pid_vin_defined() {
+    use rust_can::obdii;
+    // Mode 0x09 PID 0x02 is the VIN per ISO 15031-5.
+    assert_eq!(obdii::MODE_VEHICLE_INFO, 0x09);
+    assert_eq!(obdii::PID_VIN, 0x02);
+}
+
+// ---------------------------------------------------------------------------
+// UDS type / constant checks
+// ---------------------------------------------------------------------------
+
+//fusa:test REQ-UDS-001
+//fusa:test REQ-UDS-002
+//fusa:test REQ-UDS-003
+//fusa:test REQ-UDS-004
+//fusa:test REQ-UDS-005
+//fusa:test REQ-UDS-006
+#[test]
+fn uds_service_ids_match_iso14229() {
+    use rust_can::uds;
+    assert_eq!(uds::SID_DIAGNOSTIC_SESSION_CONTROL, 0x10);
+    assert_eq!(uds::SID_ECU_RESET, 0x11);
+    assert_eq!(uds::SID_READ_DID, 0x22);
+    assert_eq!(uds::SID_SECURITY_ACCESS, 0x27);
+    assert_eq!(uds::SID_WRITE_DID, 0x2E);
+    assert_eq!(uds::SID_TESTER_PRESENT, 0x3E);
+    assert_eq!(uds::SID_NEGATIVE_RESPONSE, 0x7F);
+}
+
+//fusa:test REQ-UDS-007
+#[test]
+fn uds_negative_response_all_common_nrcs() {
+    use rust_can::uds;
+    let nrcs: &[(u8, &str)] = &[
+        (0x10, "generalReject"),
+        (0x11, "serviceNotSupported"),
+        (0x31, "requestOutOfRange"),
+        (0x33, "securityAccessDenied"),
+        (0x35, "invalidKey"),
+        (0x7F, "serviceNotSupportedInActiveSession"),
+    ];
+    for (nrc, expected) in nrcs {
+        let e = uds::NegativeResponseError {
+            service: uds::SID_READ_DID,
+            nrc: *nrc,
+        };
+        assert_eq!(e.nrc_description(), *expected, "NRC 0x{:02X}", nrc);
+    }
+}

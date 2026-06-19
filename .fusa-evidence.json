@@ -1,13 +1,13 @@
 {
-  "generatedAt": "2026-06-19T13:36:00.000000+00:00",
+  "generatedAt": "2026-06-19T00:00:00.000000+00:00",
   "kind": "test-evidence",
   "language": "rust",
   "schemaVersion": "1.10",
   "summary": {
     "failed": 0,
     "ignored": 0,
-    "passed": 116,
-    "total": 116
+    "passed": 137,
+    "total": 137
   },
   "testRun": {
     "command": "cargo test",

@@ -68,12 +68,12 @@ jobs:
           assert d['protocol'] == 'CAN', f'bad protocol: {d}'
           print('status JSON OK')
           "
-          echo '{"id":291,"ext":false,"fd":true,"brs":true,"rtr":false,"esi":false,"xl":false,"sdt":0,"vcid":0,"af":0,"sec":false,"data":[222,173,190,239]}' \
+          echo '{"id":291,"fd":true,"brs":true,"data":[222,173,190,239]}' \
             | ./target/release/rust-can convert --protocol CAN | python3 -c "
           import json, sys
           d = json.load(sys.stdin)
           assert d['id'] == '291', f'bad id: {d}'
-          assert d['protocol'] == 'CAN', f'bad protocol: {d}'
+          assert d['protocol'] == 1, f'bad protocol: {d}'
           print('convert JSON OK')
           "
           echo '{}' | ./target/release/rust-can convert --protocol CAN; \

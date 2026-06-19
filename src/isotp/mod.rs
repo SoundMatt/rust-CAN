@@ -37,7 +37,9 @@ const FC_OVERFLOW: u8 = 0x02; // Overflow
 // ---------------------------------------------------------------------------
 
 /// ISO-TP connection configuration.
-//fusa:req REQ-ISOTP-001, REQ-ISOTP-002, REQ-ISOTP-003
+//fusa:req REQ-ISOTP-001
+//fusa:req REQ-ISOTP-002
+//fusa:req REQ-ISOTP-003
 #[derive(Debug, Clone)]
 pub struct Config {
     /// CAN ID for outgoing frames.
@@ -100,7 +102,8 @@ impl IsoTpConn {
     ///
     /// Subscribes to `cfg.rx_id` at construction time so that inbound frames
     /// are buffered before the first call to `recv()`.
-    //fusa:req REQ-ISOTP-001, REQ-ISOTP-002
+    //fusa:req REQ-ISOTP-001
+    //fusa:req REQ-ISOTP-002
     pub async fn new(bus: Arc<dyn Bus>, cfg: Config) -> Result<Self, Error> {
         // Validate config.
         if cfg.tx_id == cfg.rx_id {
@@ -124,7 +127,9 @@ impl IsoTpConn {
     ///
     /// Payloads ≤ 7 bytes are sent as a single frame.
     /// Larger payloads are segmented and flow-controlled.
-    //fusa:req REQ-ISOTP-001, REQ-ISOTP-002, REQ-ISOTP-003
+    //fusa:req REQ-ISOTP-001
+    //fusa:req REQ-ISOTP-002
+    //fusa:req REQ-ISOTP-003
     pub async fn send(&self, _ctx: Context, payload: &[u8]) -> Result<(), Error> {
         if payload.is_empty() {
             return Err(Error::Other("isotp: empty payload".into()));
@@ -141,7 +146,8 @@ impl IsoTpConn {
     }
 
     /// Receive the next ISO-TP message, reassembling multi-frame sequences.
-    //fusa:req REQ-ISOTP-004, REQ-ISOTP-005
+    //fusa:req REQ-ISOTP-004
+    //fusa:req REQ-ISOTP-005
     pub async fn recv(&self, _ctx: Context) -> Result<Vec<u8>, Error> {
         let tmo = self.cfg.effective_timeout();
 
@@ -248,7 +254,7 @@ impl IsoTpConn {
 
         let mut payload = &payload[first_chunk_len..];
 
-        //fusa:req REQ-ISOTP-003: Wait for flow control (using the shared rx channel).
+        //fusa:req REQ-ISOTP-003
         let fc = self.wait_fc(tmo).await?;
         if fc[0] & 0x0F == FC_OVERFLOW {
             return Err(Error::Other("isotp: receiver overflow".into()));
@@ -359,7 +365,7 @@ mod tests {
         }
     }
 
-    //fusa:req REQ-ISOTP-001
+    //fusa:test REQ-ISOTP-001
     #[tokio::test]
     async fn single_frame_send_receive() {
         let bus = make_bus();
@@ -379,7 +385,9 @@ mod tests {
         assert_eq!(received, payload);
     }
 
-    //fusa:req REQ-ISOTP-002, REQ-ISOTP-003, REQ-ISOTP-004
+    //fusa:test REQ-ISOTP-002
+    //fusa:test REQ-ISOTP-003
+    //fusa:test REQ-ISOTP-004
     #[tokio::test]
     async fn multi_frame_send_receive() {
         let bus = make_bus();
@@ -411,7 +419,7 @@ mod tests {
         assert_eq!(st_min_to_duration(0x80), Duration::ZERO);
     }
 
-    //fusa:req REQ-ISOTP-005
+    //fusa:test REQ-ISOTP-005
     #[tokio::test]
     async fn recv_timeout() {
         let bus = make_bus();

@@ -148,7 +148,8 @@ impl FrameReceiver {
 /// The primary CAN bus interface per RELAY spec §8.1.
 ///
 /// Implementations must be safe for concurrent use from multiple async tasks.
-//fusa:req REQ-CAN-003, REQ-CAN-006
+//fusa:req REQ-CAN-003
+//fusa:req REQ-CAN-006
 #[async_trait]
 pub trait Bus: Send + Sync {
     /// Transmit a CAN frame. Blocks until the frame is accepted or ctx expires.

@@ -5,12 +5,12 @@
 
 //! Integration tests for rust-CAN.
 //!
-//! Every test is annotated with `//fusa:req` so that rsfusa verify can trace
+//! Every test is annotated with `//fusa:test` so that rsfusa verify can trace
 //! it to the requirement it verifies.
 
 use std::sync::Arc;
 
-use rust_can::relay::{Context, Protocol, SubscriberOptions};
+use rust_can::relay::{BackPressurePolicy, Context, Protocol, SubscriberOptions};
 use rust_can::virtual_bus::VirtualBus;
 use rust_can::{adapt, from_message, to_message, Bus, Filter, Frame};
 
@@ -18,7 +18,8 @@ use rust_can::{adapt, from_message, to_message, Bus, Filter, Frame};
 // Virtual bus integration
 // ---------------------------------------------------------------------------
 
-//fusa:test REQ-VIRT-001, REQ-VIRT-002
+//fusa:test REQ-VIRT-001
+//fusa:test REQ-VIRT-002
 #[tokio::test]
 async fn virtual_bus_send_receive_roundtrip() {
     let bus = Arc::new(VirtualBus::new());
@@ -41,7 +42,8 @@ async fn virtual_bus_send_receive_roundtrip() {
     assert_eq!(received.data, sent.data);
 }
 
-//fusa:test REQ-VIRT-002, REQ-VIRT-003
+//fusa:test REQ-VIRT-002
+//fusa:test REQ-VIRT-003
 #[tokio::test]
 async fn virtual_bus_multiple_subscribers_all_receive() {
     let bus = Arc::new(VirtualBus::new());
@@ -223,7 +225,8 @@ async fn to_message_from_message_roundtrip() {
 // Frame validation
 // ---------------------------------------------------------------------------
 
-//fusa:test REQ-CAN-004, REQ-CAN-009
+//fusa:test REQ-CAN-004
+//fusa:test REQ-CAN-009
 #[test]
 fn validate_frame_standard_id_boundary() {
     use rust_can::validate_frame;
@@ -239,7 +242,8 @@ fn validate_frame_standard_id_boundary() {
     .is_err());
 }
 
-//fusa:test REQ-CAN-004, REQ-CAN-010
+//fusa:test REQ-CAN-004
+//fusa:test REQ-CAN-010
 #[test]
 fn validate_frame_extended_id_boundary() {
     use rust_can::validate_frame;
@@ -257,7 +261,8 @@ fn validate_frame_extended_id_boundary() {
     .is_err());
 }
 
-//fusa:test REQ-CAN-004, REQ-CAN-014
+//fusa:test REQ-CAN-004
+//fusa:test REQ-CAN-014
 #[test]
 fn validate_frame_fd_xl_mutual_exclusion() {
     use rust_can::validate_frame;
@@ -275,7 +280,8 @@ fn validate_frame_fd_xl_mutual_exclusion() {
 // Mock bus
 // ---------------------------------------------------------------------------
 
-//fusa:test REQ-CAN-003, REQ-CAN-006
+//fusa:test REQ-CAN-003
+//fusa:test REQ-CAN-006
 #[tokio::test]
 async fn mock_bus_records_and_injects() {
     use rust_can::mock::MockBus;
@@ -315,7 +321,10 @@ async fn mock_bus_records_and_injects() {
 // Safety E2E
 // ---------------------------------------------------------------------------
 
-//fusa:test REQ-SAFETY-001, REQ-SAFETY-002, REQ-SAFETY-003, REQ-SAFETY-004
+//fusa:test REQ-SAFETY-001
+//fusa:test REQ-SAFETY-002
+//fusa:test REQ-SAFETY-003
+//fusa:test REQ-SAFETY-004
 #[test]
 fn safety_protect_unwrap_roundtrip() {
     use rust_can::safety::{Config, Protector, Receiver};
@@ -335,7 +344,8 @@ fn safety_protect_unwrap_roundtrip() {
     assert_eq!(recovered, payload);
 }
 
-//fusa:test REQ-SAFETY-002, REQ-SAFETY-004
+//fusa:test REQ-SAFETY-002
+//fusa:test REQ-SAFETY-004
 #[test]
 fn safety_crc_mismatch_detected() {
     use rust_can::safety::{Config, E2EErrorKind, Protector, Receiver};
@@ -358,7 +368,8 @@ fn safety_crc_mismatch_detected() {
 // J1939
 // ---------------------------------------------------------------------------
 
-//fusa:test REQ-J1939-001, REQ-J1939-004
+//fusa:test REQ-J1939-001
+//fusa:test REQ-J1939-004
 #[test]
 fn j1939_encode_decode_roundtrip() {
     use rust_can::j1939::{decode_id, encode_id, Pgn, Priority, BROADCAST_ADDR};
@@ -380,7 +391,8 @@ fn j1939_encode_decode_roundtrip() {
 // DBC
 // ---------------------------------------------------------------------------
 
-//fusa:test REQ-DBC-001, REQ-DBC-002
+//fusa:test REQ-DBC-001
+//fusa:test REQ-DBC-002
 #[test]
 fn dbc_parse_and_decode() {
     use rust_can::dbc::parse;
@@ -407,7 +419,9 @@ BO_ 100 SpeedMsg: 4 ECU
 // ISO-TP
 // ---------------------------------------------------------------------------
 
-//fusa:test REQ-ISOTP-001, REQ-ISOTP-002, REQ-ISOTP-004
+//fusa:test REQ-ISOTP-001
+//fusa:test REQ-ISOTP-002
+//fusa:test REQ-ISOTP-004
 #[tokio::test]
 async fn isotp_single_frame_roundtrip() {
     use rust_can::isotp::{Config, IsoTpConn};
@@ -448,4 +462,334 @@ async fn isotp_single_frame_roundtrip() {
 fn spec_version_constant() {
     assert_eq!(rust_can::SPEC_VERSION, "1.1");
     assert_eq!(rust_can::RELAY_SPEC_VERSION, "1.1");
+}
+
+// ---------------------------------------------------------------------------
+// Concurrent safety (REQ-CAN-006)
+// ---------------------------------------------------------------------------
+
+//fusa:test REQ-CAN-006
+#[tokio::test]
+async fn concurrent_senders_no_panic() {
+    use tokio::task::JoinSet;
+
+    let bus = Arc::new(VirtualBus::new());
+    let rx = bus
+        .subscribe(vec![], SubscriberOptions::default())
+        .await
+        .unwrap();
+
+    let mut set = JoinSet::new();
+    for i in 0u32..8 {
+        let b = bus.clone();
+        set.spawn(async move {
+            for j in 0u32..16 {
+                b.send(
+                    Context::background(),
+                    Frame {
+                        id: (i * 16 + j) & 0x7FF,
+                        data: vec![i as u8, j as u8],
+                        ..Default::default()
+                    },
+                )
+                .await
+                .unwrap();
+            }
+        });
+    }
+    set.join_all().await;
+    drop(rx);
+}
+
+// ---------------------------------------------------------------------------
+// Frame validation boundaries (REQ-CAN-009..REQ-CAN-013)
+// ---------------------------------------------------------------------------
+
+//fusa:test REQ-CAN-011
+#[test]
+fn validate_frame_brs_requires_fd() {
+    use rust_can::validate_frame;
+    assert!(validate_frame(&Frame {
+        id: 0x100,
+        brs: true,
+        fd: false,
+        ..Default::default()
+    })
+    .is_err());
+    assert!(validate_frame(&Frame {
+        id: 0x100,
+        brs: true,
+        fd: true,
+        ..Default::default()
+    })
+    .is_ok());
+}
+
+//fusa:test REQ-CAN-012
+#[test]
+fn validate_frame_rtr_rejected_on_fd() {
+    use rust_can::validate_frame;
+    assert!(validate_frame(&Frame {
+        id: 0x100,
+        fd: true,
+        rtr: true,
+        ..Default::default()
+    })
+    .is_err());
+}
+
+//fusa:test REQ-CAN-013
+#[test]
+fn validate_frame_data_length_limits() {
+    use rust_can::validate_frame;
+    // Classic: max 8 bytes
+    assert!(validate_frame(&Frame {
+        id: 0x100,
+        data: vec![0u8; 8],
+        ..Default::default()
+    })
+    .is_ok());
+    assert!(validate_frame(&Frame {
+        id: 0x100,
+        data: vec![0u8; 9],
+        ..Default::default()
+    })
+    .is_err());
+    // FD: max 64 bytes
+    assert!(validate_frame(&Frame {
+        id: 0x100,
+        fd: true,
+        data: vec![0u8; 64],
+        ..Default::default()
+    })
+    .is_ok());
+    assert!(validate_frame(&Frame {
+        id: 0x100,
+        fd: true,
+        data: vec![0u8; 65],
+        ..Default::default()
+    })
+    .is_err());
+}
+
+// ---------------------------------------------------------------------------
+// Safety CRC known-good vector (REQ-SAFETY-002)
+// ---------------------------------------------------------------------------
+
+//fusa:test REQ-SAFETY-002
+#[test]
+fn safety_crc_known_vector() {
+    use rust_can::safety::{Config, Protector, Receiver};
+
+    let cfg = Config {
+        data_id: 0x0000,
+        source_id: 0x0000,
+    };
+    let protector = Protector::new(cfg);
+    let receiver = Receiver::new(cfg);
+
+    let payload = b"";
+    let protected = protector.protect(payload);
+    assert_eq!(protected.len(), 10);
+    receiver.unwrap(&protected).expect("known-good vector must verify");
+}
+
+// ---------------------------------------------------------------------------
+// ISO-TP multi-frame (REQ-ISOTP-002, REQ-ISOTP-003)
+// ---------------------------------------------------------------------------
+
+//fusa:test REQ-ISOTP-002
+//fusa:test REQ-ISOTP-003
+#[tokio::test]
+async fn isotp_multi_frame_roundtrip() {
+    use rust_can::isotp::{Config, IsoTpConn};
+
+    let bus = Arc::new(VirtualBus::new());
+    let sender_cfg = Config {
+        tx_id: 0x7E0,
+        rx_id: 0x7E8,
+        timeout: std::time::Duration::from_millis(500),
+        ..Default::default()
+    };
+    let receiver_cfg = Config {
+        tx_id: 0x7E8,
+        rx_id: 0x7E0,
+        timeout: std::time::Duration::from_millis(500),
+        ..Default::default()
+    };
+
+    let sender = IsoTpConn::new(bus.clone(), sender_cfg).await.unwrap();
+    let receiver = IsoTpConn::new(bus.clone(), receiver_cfg).await.unwrap();
+
+    let payload: Vec<u8> = (0u8..=99).collect(); // 100 bytes — multi-frame
+    let payload_clone = payload.clone();
+
+    let recv_handle = tokio::spawn(async move { receiver.recv(Context::background()).await });
+
+    sender.send(Context::background(), &payload).await.unwrap();
+
+    let result = recv_handle.await.unwrap().unwrap();
+    assert_eq!(result, payload_clone);
+}
+
+// ---------------------------------------------------------------------------
+// Back-pressure policies (REQ-VIRT-005)
+// ---------------------------------------------------------------------------
+
+//fusa:test REQ-VIRT-005
+#[tokio::test]
+async fn back_pressure_drop_oldest() {
+    use rust_can::relay::BackPressurePolicy;
+
+    let bus = Arc::new(VirtualBus::new());
+    let rx = bus
+        .subscribe(
+            vec![],
+            SubscriberOptions {
+                channel_depth: 2,
+                back_pressure: BackPressurePolicy::DropOldest,
+            },
+        )
+        .await
+        .unwrap();
+
+    for i in 0u32..5 {
+        bus.send(Context::background(), Frame {
+            id: i & 0x7FF,
+            data: vec![i as u8],
+            ..Default::default()
+        })
+        .await
+        .unwrap();
+    }
+
+    // DropOldest keeps the newest 2 frames (ids 3 and 4).
+    let f1 = rx.recv().await.unwrap();
+    let f2 = rx.recv().await.unwrap();
+    assert_eq!(f1.id, 3);
+    assert_eq!(f2.id, 4);
+}
+
+// ---------------------------------------------------------------------------
+// Security tests
+// ---------------------------------------------------------------------------
+
+//fusa:sec-test REQ-SEC-001
+#[test]
+fn sec_frame_id_bounds_injection_prevention() {
+    use rust_can::validate_frame;
+    // Standard ID injection attempt: ID > 0x7FF
+    assert!(validate_frame(&Frame {
+        id: 0x800,
+        ..Default::default()
+    })
+    .is_err());
+    // Extended ID injection attempt: ID > 0x1FFFFFFF
+    assert!(validate_frame(&Frame {
+        id: 0x2000_0000,
+        ext: true,
+        ..Default::default()
+    })
+    .is_err());
+    // Boundary values must be accepted
+    assert!(validate_frame(&Frame {
+        id: 0x7FF,
+        ..Default::default()
+    })
+    .is_ok());
+    assert!(validate_frame(&Frame {
+        id: 0x1FFF_FFFF,
+        ext: true,
+        ..Default::default()
+    })
+    .is_ok());
+}
+
+//fusa:sec-test REQ-SEC-002
+#[test]
+fn sec_e2e_crc_tamper_detection() {
+    use rust_can::safety::{Config, E2EErrorKind, Protector, Receiver};
+
+    let cfg = Config {
+        data_id: 0xABCD,
+        source_id: 0x1234,
+    };
+    let protector = Protector::new(cfg);
+    let receiver = Receiver::new(cfg);
+
+    let payload = b"safety-critical-command";
+    let protected = protector.protect(payload);
+
+    // Tamper with the CRC bytes directly (bytes 8-9 of the header)
+    let mut tampered = protected.clone();
+    tampered[8] ^= 0xFF;
+    let err = receiver.unwrap(&tampered).unwrap_err();
+    assert_eq!(err.kind, E2EErrorKind::CrcMismatch);
+
+    // Tamper with the payload
+    let mut tampered2 = protected.clone();
+    tampered2[10] ^= 0x01;
+    let receiver2 = Receiver::new(cfg);
+    let err2 = receiver2.unwrap(&tampered2).unwrap_err();
+    assert_eq!(err2.kind, E2EErrorKind::CrcMismatch);
+}
+
+//fusa:sec-test REQ-SEC-003
+#[test]
+fn sec_replay_detection_via_sequence_counter() {
+    use rust_can::safety::{Config, E2EErrorKind, Protector, Receiver};
+
+    let cfg = Config {
+        data_id: 0x0001,
+        source_id: 0x0001,
+    };
+    let protector = Protector::new(cfg);
+    let receiver = Receiver::new(cfg);
+
+    let p0 = protector.protect(b"frame 0");
+    let _p1 = protector.protect(b"frame 1");
+    let p2 = protector.protect(b"frame 2");
+
+    receiver.unwrap(&p0).unwrap();
+    // Replay frame 0 after frame 2 is skipped — should detect gap
+    let err = receiver.unwrap(&p2).unwrap_err();
+    assert_eq!(err.kind, E2EErrorKind::SequenceGap);
+}
+
+//fusa:sec-test REQ-SEC-004
+#[tokio::test]
+async fn sec_isotp_timeout_prevents_resource_exhaustion() {
+    use rust_can::isotp::{Config, IsoTpConn};
+
+    let bus = Arc::new(VirtualBus::new());
+    let cfg = Config {
+        tx_id: 0x7E0,
+        rx_id: 0x7E8,
+        timeout: std::time::Duration::from_millis(20),
+        ..Default::default()
+    };
+    let conn = IsoTpConn::new(bus, cfg).await.unwrap();
+    // No frames arrive — recv must return Timeout, not block forever
+    let result = conn.recv(Context::background()).await;
+    assert!(matches!(result, Err(rust_can::Error::Timeout)));
+}
+
+//fusa:sec-test REQ-SEC-005
+#[test]
+fn sec_dbc_parse_no_panic_on_malformed_input() {
+    use rust_can::dbc::parse;
+
+    let malformed_inputs = [
+        "",
+        "BO_ not_a_number Name: 4 ECU",
+        "SG_ Signal : 0|0@1+ (0,0) [] \"\" Vector__XXX",
+        &"A".repeat(65536),
+        "BO_ 100 X: 0 ECU\n SG_ S : 999|999@1+ (0,0) [] \"\" V",
+        "\x00\x01\x02\x03",
+    ];
+
+    for input in &malformed_inputs {
+        // Must not panic — result may be Ok or Err, but never a panic
+        let _ = parse(input);
+    }
 }

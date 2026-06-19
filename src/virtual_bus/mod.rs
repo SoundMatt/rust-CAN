@@ -128,14 +128,16 @@ impl Default for VirtualBus {
 #[async_trait]
 impl Bus for VirtualBus {
     /// Broadcast a frame to all matching subscribers.
-    //fusa:req REQ-VIRT-002, REQ-VIRT-004
+    //fusa:req REQ-VIRT-002
+    //fusa:req REQ-VIRT-004
+    //fusa:req REQ-CAN-006
     async fn send(&self, _ctx: Context, frame: Frame) -> Result<(), Error> {
         if self.closed.load(Ordering::SeqCst) {
             self.error_count.fetch_add(1, Ordering::Relaxed);
             return Err(Error::Closed);
         }
 
-        //fusa:req REQ-CAN-004: validate before sending.
+        //fusa:req REQ-CAN-004
         if let Err(e) = validate_frame(&frame) {
             self.error_count.fetch_add(1, Ordering::Relaxed);
             return Err(e);
@@ -159,7 +161,10 @@ impl Bus for VirtualBus {
     }
 
     /// Subscribe to frames matching any of the given filters.
-    //fusa:req REQ-VIRT-003, REQ-VIRT-004, REQ-VIRT-005
+    //fusa:req REQ-VIRT-003
+    //fusa:req REQ-VIRT-004
+    //fusa:req REQ-VIRT-005
+    //fusa:req REQ-CAN-006
     async fn subscribe(
         &self,
         filters: Vec<Filter>,
@@ -297,6 +302,8 @@ mod tests {
         }
     }
 
+    //fusa:test REQ-VIRT-001
+    //fusa:test REQ-VIRT-003
     #[tokio::test]
     async fn send_and_receive() {
         let bus = VirtualBus::new();
@@ -314,7 +321,7 @@ mod tests {
         assert_eq!(f.data, vec![1, 2, 3]);
     }
 
-    //fusa:req REQ-VIRT-002
+    //fusa:test REQ-VIRT-002
     #[tokio::test]
     async fn broadcast_to_multiple_subscribers() {
         let bus = VirtualBus::new();
@@ -335,7 +342,7 @@ mod tests {
         assert_eq!(rx2.recv().await.unwrap().id, 0x200);
     }
 
-    //fusa:req REQ-VIRT-004
+    //fusa:test REQ-VIRT-004
     #[tokio::test]
     async fn filter_semantics() {
         let bus = VirtualBus::new();
@@ -362,7 +369,7 @@ mod tests {
         assert_eq!(f.id, 0x100);
     }
 
-    //fusa:req REQ-CAN-008
+    //fusa:test REQ-CAN-008
     #[tokio::test]
     async fn send_after_close_returns_closed() {
         let bus = VirtualBus::new();
@@ -374,6 +381,7 @@ mod tests {
         assert!(matches!(err, Error::Closed));
     }
 
+    //fusa:test REQ-CAN-008
     #[tokio::test]
     async fn close_is_idempotent() {
         let bus = VirtualBus::new();
@@ -381,7 +389,7 @@ mod tests {
         bus.close().await.unwrap(); // second close must not error
     }
 
-    //fusa:req REQ-VIRT-005
+    //fusa:test REQ-VIRT-005
     #[tokio::test]
     async fn back_pressure_drop_newest() {
         let bus = VirtualBus::new();
@@ -453,6 +461,7 @@ mod tests {
         assert_eq!(f.id, 0x300);
     }
 
+    //fusa:test REQ-CAN-004
     #[tokio::test]
     async fn invalid_frame_rejected() {
         let bus = VirtualBus::new();

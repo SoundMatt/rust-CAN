@@ -44,7 +44,9 @@ pub struct Config {
 // ---------------------------------------------------------------------------
 
 /// Category of E2E check failure.
-//fusa:req REQ-SAFETY-004, REQ-SAFETY-005, REQ-SAFETY-006
+//fusa:req REQ-SAFETY-004
+//fusa:req REQ-SAFETY-005
+//fusa:req REQ-SAFETY-006
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum E2EErrorKind {
     /// The computed CRC does not match the header CRC.
@@ -70,7 +72,9 @@ impl std::fmt::Display for E2EErrorKind {
 // ---------------------------------------------------------------------------
 
 /// An E2E safety check failure.
-//fusa:req REQ-SAFETY-004, REQ-SAFETY-005, REQ-SAFETY-006
+//fusa:req REQ-SAFETY-004
+//fusa:req REQ-SAFETY-005
+//fusa:req REQ-SAFETY-006
 #[derive(Debug)]
 pub struct E2EError {
     pub kind: E2EErrorKind,
@@ -95,7 +99,9 @@ impl std::error::Error for E2EError {}
 // ---------------------------------------------------------------------------
 
 /// Prepends an E2E header to payloads before transmission.
-//fusa:req REQ-SAFETY-001, REQ-SAFETY-002, REQ-SAFETY-003
+//fusa:req REQ-SAFETY-001
+//fusa:req REQ-SAFETY-002
+//fusa:req REQ-SAFETY-003
 pub struct Protector {
     cfg: Config,
     seq: AtomicU32,
@@ -113,7 +119,9 @@ impl Protector {
     /// Prepend the E2E header and return the protected payload.
     ///
     /// The sequence counter increments monotonically on each call.
-    //fusa:req REQ-SAFETY-001, REQ-SAFETY-002, REQ-SAFETY-003
+    //fusa:req REQ-SAFETY-001
+    //fusa:req REQ-SAFETY-002
+    //fusa:req REQ-SAFETY-003
     pub fn protect(&self, payload: &[u8]) -> Vec<u8> {
         let seq = self.seq.fetch_add(1, Ordering::SeqCst);
         let header = build_header(self.cfg.data_id, self.cfg.source_id, seq, payload);
@@ -130,7 +138,9 @@ impl Protector {
 // ---------------------------------------------------------------------------
 
 /// Validates E2E headers and strips them from received data.
-//fusa:req REQ-SAFETY-004, REQ-SAFETY-005, REQ-SAFETY-006
+//fusa:req REQ-SAFETY-004
+//fusa:req REQ-SAFETY-005
+//fusa:req REQ-SAFETY-006
 pub struct Receiver {
     cfg: Config,
     state: Mutex<ReceiverState>,
@@ -160,7 +170,9 @@ impl Receiver {
     /// - `E2EErrorKind::HeaderTooShort` — data shorter than 10 bytes.
     /// - `E2EErrorKind::CrcMismatch` — CRC in the header does not match.
     /// - `E2EErrorKind::SequenceGap` — sequence counter is not consecutive.
-    //fusa:req REQ-SAFETY-004, REQ-SAFETY-005, REQ-SAFETY-006
+    //fusa:req REQ-SAFETY-004
+    //fusa:req REQ-SAFETY-005
+    //fusa:req REQ-SAFETY-006
     pub fn unwrap(&self, data: &[u8]) -> Result<Vec<u8>, E2EError> {
         //fusa:req REQ-SAFETY-006
         if data.len() < HEADER_SIZE {
@@ -175,7 +187,7 @@ impl Receiver {
         let received_crc = u16::from_le_bytes([data[8], data[9]]);
         let payload = &data[HEADER_SIZE..];
 
-        //fusa:req REQ-SAFETY-004: verify CRC.
+        //fusa:req REQ-SAFETY-004
         let expected_header = build_header(self.cfg.data_id, self.cfg.source_id, seq, payload);
         let expected_crc = u16::from_le_bytes([expected_header[8], expected_header[9]]);
         if received_crc != expected_crc {
@@ -189,7 +201,7 @@ impl Receiver {
             });
         }
 
-        //fusa:req REQ-SAFETY-005: check sequence counter.
+        //fusa:req REQ-SAFETY-005
         let mut state = self.state.lock().unwrap();
         if !state.first && seq != state.last_seq.wrapping_add(1) {
             let expected = state.last_seq.wrapping_add(1);
@@ -216,6 +228,9 @@ impl Receiver {
 ///
 /// The CRC slot (bytes 8–9) is treated as zero when computing the CRC,
 /// then the computed CRC is written into the slot.
+//fusa:req REQ-SAFETY-001
+//fusa:req REQ-SAFETY-002
+//fusa:req REQ-SAFETY-003
 fn build_header(data_id: u16, source_id: u16, seq: u32, payload: &[u8]) -> [u8; HEADER_SIZE] {
     let mut hdr = [0u8; HEADER_SIZE];
     hdr[0..2].copy_from_slice(&data_id.to_le_bytes());
@@ -274,7 +289,9 @@ mod tests {
         assert_eq!(&protected[HEADER_SIZE..], payload);
     }
 
-    //fusa:test REQ-SAFETY-002, REQ-SAFETY-003, REQ-SAFETY-004
+    //fusa:test REQ-SAFETY-002
+    //fusa:test REQ-SAFETY-003
+    //fusa:test REQ-SAFETY-004
     #[test]
     fn protect_and_unwrap() {
         let (p, r) = make_pair();

@@ -38,11 +38,14 @@ Full HARA: see `.fusa-hara.json`.
 
 ## 3. Requirements
 
-High-level safety requirements are maintained in `.fusa-reqs.json` in rsfusa format (36 requirements, REQ-CAN-001 through REQ-DBC-002). Every requirement is:
+High-level safety requirements are maintained in `.fusa-reqs.json` in rsfusa format (43 requirements: REQ-CAN-001..REQ-DBC-002 plus REQ-SEC-001..REQ-SEC-005). Every requirement is:
 
-- Tagged with `"standard": "iso26262"` and `"level": "HLR"`
-- Annotated in source with `//fusa:req REQ-XXX-NNN`
-- Traced to at least one test with `//fusa:req` above `#[test]`
+- Tagged with `"standard": "iso26262"`, `"asil"`, and `"verificationMethod"`
+- Annotated in source with `//fusa:req REQ-XXX-NNN` (one requirement per line)
+- Traced to at least one test with `//fusa:test REQ-XXX-NNN` above `#[test]`
+- Security requirements additionally annotated with `//fusa:sec-test REQ-SEC-NNN`
+
+See `ARCHITECTURE.md` for ASIL allocation and module decomposition.
 
 ---
 
@@ -85,11 +88,15 @@ Every PR must pass:
 
 ## 5. Tool Qualification
 
-rust-FuSa (rsfusa) is used as a safety analysis and verification tool. Tool qualification evidence is produced by `rsfusa qualify` on each release and archived in the audit pack.
+| Tool | Version | TQL | Qualification Method |
+|------|---------|-----|----------------------|
+| rsfusa | 0.2.8 | TQL-2 | `rsfusa qualify` output archived per release; tool output validated against manual inspection |
+| rustc / cargo | pinned in `rust-toolchain.toml` | TQL-3 | Version pinned in `Cargo.lock`; verified against Rust compiler test suite results |
 
-The Rust compiler and cargo are qualified via:
-- Version pinning in `Cargo.lock` and `rust-toolchain.toml`
-- Verified against known compiler test suite results
+- **TQL-2** (ISO 26262-8 §11): Tool error detection sufficient; tool output used as evidence but does not replace mandatory testing.
+- **TQL-3** (ISO 26262-8 §11): Tool may increase risk; additional validation required (satisfied by `cargo test` as independent gate).
+
+**ASIL Decomposition:** rust-CAN implements ASIL-B(D) = ASIL-A(D) + ASIL-A(D) at the architectural boundary between the `safety` module (CRC + sequence counter, ASIL-B) and the `isotp` module (timeout, ASIL-A). See `ARCHITECTURE.md §3`.
 
 ---
 

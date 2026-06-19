@@ -99,7 +99,9 @@ pub struct J1939Frame {
 ///
 /// For peer-to-peer (PF < 240): PS is the destination address; PGN excludes PS.
 /// For broadcast (PF ≥ 240): PS is the group extension, included in PGN.
-//fusa:req REQ-J1939-001, REQ-J1939-002, REQ-J1939-003
+//fusa:req REQ-J1939-001
+//fusa:req REQ-J1939-002
+//fusa:req REQ-J1939-003
 pub fn decode_id(id: u32) -> (Priority, Pgn, u8) {
     let priority = Priority((id >> 26) as u8 & 0x07);
     let src = (id & 0xFF) as u8;
@@ -181,7 +183,8 @@ impl J1939Bus {
     /// Subscribe to J1939 frames, optionally filtered by PGN.
     ///
     /// Pass an empty slice for `pgns` to receive all J1939 frames.
-    //fusa:req REQ-J1939-005, REQ-J1939-006
+    //fusa:req REQ-J1939-005
+    //fusa:req REQ-J1939-006
     pub async fn subscribe(
         &self,
         pgns: Vec<Pgn>,
@@ -224,7 +227,7 @@ impl J1939Receiver {
 
             let (priority, pgn, src) = decode_id(f.id);
 
-            //fusa:req REQ-J1939-006: filter by PGN if any were specified.
+            //fusa:req REQ-J1939-006
             if !self.pgns.is_empty() && !self.pgns.contains(&pgn) {
                 continue;
             }
@@ -259,6 +262,8 @@ impl J1939Receiver {
 mod tests {
     use super::*;
 
+    //fusa:test REQ-J1939-002
+    //fusa:test REQ-J1939-003
     #[test]
     fn decode_peer_to_peer() {
         // PF = 0xEC (236 < 240) → peer-to-peer
@@ -270,6 +275,8 @@ mod tests {
         assert_eq!(src, 0x01);
     }
 
+    //fusa:test REQ-J1939-002
+    //fusa:test REQ-J1939-003
     #[test]
     fn decode_broadcast() {
         // PF = 0xFE (254 ≥ 240) → broadcast
@@ -281,6 +288,8 @@ mod tests {
         assert_eq!(src, 0x01);
     }
 
+    //fusa:test REQ-J1939-001
+    //fusa:test REQ-J1939-004
     #[test]
     fn encode_decode_roundtrip_broadcast() {
         let priority = Priority(3);
@@ -296,6 +305,8 @@ mod tests {
         assert_eq!(src2, src);
     }
 
+    //fusa:test REQ-J1939-001
+    //fusa:test REQ-J1939-004
     #[test]
     fn encode_decode_roundtrip_peer() {
         let priority = Priority(6);
@@ -313,6 +324,8 @@ mod tests {
         assert_eq!(((id >> 8) & 0xFF) as u8, dst);
     }
 
+    //fusa:test REQ-J1939-005
+    //fusa:test REQ-J1939-006
     #[tokio::test]
     async fn send_and_receive_j1939() {
         use crate::virtual_bus::VirtualBus;
@@ -338,6 +351,7 @@ mod tests {
         assert_eq!(received.data, vec![1, 2, 3]);
     }
 
+    //fusa:test REQ-J1939-006
     #[tokio::test]
     async fn pgn_filter_works() {
         use crate::virtual_bus::VirtualBus;

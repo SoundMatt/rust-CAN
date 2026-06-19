@@ -202,8 +202,13 @@ impl std::fmt::Debug for LoanedFrame {
 /// Validates a CAN frame against RELAY spec §15.1 constraints.
 ///
 /// Returns `Error::InvalidFrame` for any structural violation.
-//fusa:req REQ-CAN-004, REQ-CAN-009, REQ-CAN-010, REQ-CAN-011, REQ-CAN-012,
-//fusa:req REQ-CAN-013, REQ-CAN-014
+//fusa:req REQ-CAN-004
+//fusa:req REQ-CAN-009
+//fusa:req REQ-CAN-010
+//fusa:req REQ-CAN-011
+//fusa:req REQ-CAN-012
+//fusa:req REQ-CAN-013
+//fusa:req REQ-CAN-014
 pub fn validate_frame(f: &Frame) -> Result<(), Error> {
     // XL and FD are mutually exclusive.
     if f.xl && f.fd {
@@ -260,12 +265,12 @@ pub fn validate_frame(f: &Frame) -> Result<(), Error> {
         }
     }
 
-    //fusa:req REQ-CAN-011: BRS requires FD.
+    //fusa:req REQ-CAN-011
     if f.brs && !f.fd {
         return Err(Error::invalid_frame("BRS requires FD=true"));
     }
 
-    //fusa:req REQ-CAN-012: RTR must be false when FD is true.
+    //fusa:req REQ-CAN-012
     if f.rtr && f.fd {
         return Err(Error::invalid_frame("RTR must be false when FD=true"));
     }
@@ -275,7 +280,7 @@ pub fn validate_frame(f: &Frame) -> Result<(), Error> {
         return Err(Error::invalid_frame("ESI requires FD or XL"));
     }
 
-    //fusa:req REQ-CAN-013: Data length constraints.
+    //fusa:req REQ-CAN-013
     if f.fd {
         if f.data.len() > CAN_FD_MAX_DATA_LEN {
             return Err(Error::invalid_frame(format!(

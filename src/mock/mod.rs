@@ -92,7 +92,11 @@ impl Bus for MockBus {
         }
 
         let depth = opts.chan_depth(64);
-        let sub_inner = Arc::new(SubInner::new(depth, opts.back_pressure, opts.rate_limit_per_sec));
+        let sub_inner = Arc::new(SubInner::new(
+            depth,
+            opts.back_pressure,
+            opts.rate_limit_per_sec,
+        ));
         let rx = FrameReceiver {
             inner: sub_inner.clone(),
         };

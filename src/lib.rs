@@ -54,14 +54,14 @@ pub mod socketcan;
 pub use adapt::{adapt, from_message, to_message};
 pub use bus::{Bus, Drainer, FrameReceiver, HealthProvider, LoaningBus, MetricsProvider};
 pub use error::Error;
-pub use safety::MessageAuthenticator;
-#[cfg(feature = "hmac-auth")]
-pub use safety::HmacSha256Auth;
 pub use frame::{
     max_data_len, validate_frame, Filter, Frame, LoanedFrame, CAN_FD_MAX_DATA_LEN,
     CAN_MAX_DATA_LEN, CAN_MAX_EXT_ID, CAN_MAX_STD_ID, CAN_XL_MAX_DATA_LEN, CAN_XL_MAX_PRIO_ID,
     CAN_XL_MIN_DATA_LEN,
 };
+pub use safety::MessageAuthenticator;
+#[cfg(feature = "hmac-auth")]
+pub use safety::HmacSha256Auth;
 
 /// The RELAY spec version this implementation targets.
 pub const SPEC_VERSION: &str = "1.1";

@@ -591,7 +591,9 @@ fn safety_crc_known_vector() {
     let payload = b"";
     let protected = protector.protect(payload);
     assert_eq!(protected.len(), 10);
-    receiver.unwrap(&protected).expect("known-good vector must verify");
+    receiver
+        .unwrap(&protected)
+        .expect("known-good vector must verify");
 }
 
 // ---------------------------------------------------------------------------
@@ -655,11 +657,14 @@ async fn back_pressure_drop_oldest() {
         .unwrap();
 
     for i in 0u32..5 {
-        bus.send(Context::background(), Frame {
-            id: i & 0x7FF,
-            data: vec![i as u8],
-            ..Default::default()
-        })
+        bus.send(
+            Context::background(),
+            Frame {
+                id: i & 0x7FF,
+                data: vec![i as u8],
+                ..Default::default()
+            },
+        )
         .await
         .unwrap();
     }
@@ -873,12 +878,17 @@ fn sec_message_authenticator_trait_is_object_safe() {
     impl MessageAuthenticator for NullAuth {
         fn sign(&self, _key: &[u8], data: &[u8]) -> Vec<u8> {
             // NOT a real MAC — for structural test only.
-            data.iter().fold(0u8, |acc, &b| acc.wrapping_add(b)).to_le_bytes().to_vec()
+            data.iter()
+                .fold(0u8, |acc, &b| acc.wrapping_add(b))
+                .to_le_bytes()
+                .to_vec()
         }
         fn verify(&self, key: &[u8], data: &[u8], tag: &[u8]) -> bool {
             self.sign(key, data) == tag
         }
-        fn tag_len(&self) -> usize { 1 }
+        fn tag_len(&self) -> usize {
+            1
+        }
     }
 
     let auth: &dyn MessageAuthenticator = &NullAuth;

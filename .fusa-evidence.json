@@ -1,0 +1,19 @@
+{
+  "generatedAt": "2026-06-19T13:36:00.000000+00:00",
+  "kind": "test-evidence",
+  "language": "rust",
+  "schemaVersion": "1.10",
+  "summary": {
+    "failed": 0,
+    "ignored": 0,
+    "passed": 109,
+    "total": 109
+  },
+  "testRun": {
+    "command": "cargo test",
+    "exitCode": 0,
+    "passed": true
+  },
+  "tool": "rust-FuSa",
+  "toolVersion": "0.2.8"
+}

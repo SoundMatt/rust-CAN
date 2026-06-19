@@ -402,10 +402,7 @@ async fn cmd_subscribe(
 /// `to_message()`, and writes the resulting `relay.Message` JSON on stdout.
 ///
 /// Exit codes: 0 = converted, 1 = invalid input, 2 = invalid args.
-fn cmd_convert(
-    protocol: String,
-    _format: OutputFormat,
-) -> Result<i32, Box<dyn std::error::Error>> {
+fn cmd_convert(protocol: String, _format: OutputFormat) -> Result<i32, Box<dyn std::error::Error>> {
     if !protocol.eq_ignore_ascii_case("CAN") {
         eprintln!(
             "rust-can: convert: unsupported protocol '{}'; this tool implements CAN",

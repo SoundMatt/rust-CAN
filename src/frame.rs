@@ -203,6 +203,7 @@ impl std::fmt::Debug for LoanedFrame {
 ///
 /// Returns `Error::InvalidFrame` for any structural violation.
 //fusa:req REQ-CAN-004
+//fusa:req REQ-SEC-001
 //fusa:req REQ-CAN-009
 //fusa:req REQ-CAN-010
 //fusa:req REQ-CAN-011
@@ -497,6 +498,7 @@ mod tests {
         ));
     }
 
+    //fusa:test REQ-CAN-002
     #[test]
     fn filter_matches() {
         let f = Frame {

@@ -63,6 +63,7 @@ impl SubInner {
     ///
     /// Returns `true` if the frame was accepted (delivered), `false` if it
     /// was dropped (capacity or rate limit exceeded).
+    //fusa:req REQ-SEC-007
     pub(crate) fn push(&self, frame: Frame) -> bool {
         // Rate-limit check: sliding 1-second window.
         if self.rate_limit > 0 {

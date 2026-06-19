@@ -210,6 +210,8 @@ impl Receiver {
     //fusa:req REQ-SAFETY-004
     //fusa:req REQ-SAFETY-005
     //fusa:req REQ-SAFETY-006
+    //fusa:req REQ-SEC-002
+    //fusa:req REQ-SEC-003
     pub fn unwrap(&self, data: &[u8]) -> Result<Vec<u8>, E2EError> {
         //fusa:req REQ-SAFETY-006
         if data.len() < HEADER_SIZE {

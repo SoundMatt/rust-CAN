@@ -309,6 +309,7 @@ impl IsoTpConn {
 
     async fn wait_fc(&self, tmo: Duration) -> Result<Vec<u8>, Error> {
         //fusa:req REQ-ISOTP-005
+        //fusa:req REQ-SEC-004
         let f = timeout(tmo, self.rx.recv())
             .await
             .map_err(|_| Error::Timeout)?

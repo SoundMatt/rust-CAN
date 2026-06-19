@@ -76,10 +76,14 @@ jobs:
           assert d['protocol'] == 1, f'bad protocol: {d}'
           print('convert JSON OK')
           "
-          echo '{}' | ./target/release/rust-can convert --protocol CAN; \
-            test $? -eq 1 && echo 'convert exit-1 on bad input OK'
-          ./target/release/rust-can convert --protocol LIN </dev/null; \
-            test $? -eq 2 && echo 'convert exit-2 on bad protocol OK'
+          convert_ec=0
+          echo '{}' | ./target/release/rust-can convert --protocol CAN || convert_ec=$?
+          test "$convert_ec" -eq 1 && echo 'convert exit-1 on bad input OK' || \
+            { echo "FAIL: expected exit 1 on bad input, got $convert_ec"; exit 1; }
+          lin_ec=0
+          ./target/release/rust-can convert --protocol LIN </dev/null || lin_ec=$?
+          test "$lin_ec" -eq 2 && echo 'convert exit-2 on bad protocol OK' || \
+            { echo "FAIL: expected exit 2 on bad protocol, got $lin_ec"; exit 1; }
 
   # ── ASIL-B safety checks via rust-FuSa ────────────────────────────────────
   safety:

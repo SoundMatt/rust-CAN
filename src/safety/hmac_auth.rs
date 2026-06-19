@@ -50,15 +50,13 @@ pub struct HmacSha256Auth;
 
 impl MessageAuthenticator for HmacSha256Auth {
     fn sign(&self, key: &[u8], data: &[u8]) -> Vec<u8> {
-        let mut mac =
-            HmacSha256::new_from_slice(key).expect("HMAC-SHA256 accepts any key length");
+        let mut mac = HmacSha256::new_from_slice(key).expect("HMAC-SHA256 accepts any key length");
         mac.update(data);
         mac.finalize().into_bytes().to_vec()
     }
 
     fn verify(&self, key: &[u8], data: &[u8], tag: &[u8]) -> bool {
-        let mut mac =
-            HmacSha256::new_from_slice(key).expect("HMAC-SHA256 accepts any key length");
+        let mut mac = HmacSha256::new_from_slice(key).expect("HMAC-SHA256 accepts any key length");
         mac.update(data);
         // constant-time comparison — prevents timing side-channels
         mac.verify_slice(tag).is_ok()

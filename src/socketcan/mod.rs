@@ -186,7 +186,14 @@ impl SocketCanBus {
         let async_fd_clone = async_fd.clone();
         let fd_enabled_clone = fd_enabled;
         tokio::spawn(async move {
-            reader_task(async_fd_clone, closed_clone, bus_off_clone, subs_clone, fd_enabled_clone).await;
+            reader_task(
+                async_fd_clone,
+                closed_clone,
+                bus_off_clone,
+                subs_clone,
+                fd_enabled_clone,
+            )
+            .await;
         });
 
         Ok(Self {

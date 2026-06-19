@@ -65,6 +65,21 @@ enum Commands {
         /// Use extended (29-bit) frame ID.
         #[arg(long)]
         ext: bool,
+        /// Send as CAN XL frame (mutually exclusive with --fd).
+        #[arg(long)]
+        xl: bool,
+        /// CAN XL SDU Type (0–255, XL only).
+        #[arg(long, default_value = "0")]
+        sdt: u8,
+        /// CAN XL Virtual CAN network ID (0–255, XL only).
+        #[arg(long, default_value = "0")]
+        vcid: u8,
+        /// CAN XL Acceptance Field (XL only).
+        #[arg(long, default_value = "0")]
+        af: u32,
+        /// CAN XL Simple Extended Content flag (XL only).
+        #[arg(long)]
+        sec: bool,
     },
 
     /// Subscribe to CAN frames on the virtual bus.
@@ -77,6 +92,22 @@ enum Commands {
         count: usize,
         /// Output format.
         #[arg(long, value_enum, default_value = "text")]
+        format: OutputFormat,
+    },
+
+    /// Convert a CAN frame JSON from stdin to relay.Message JSON on stdout.
+    ///
+    /// Reads one can.Frame as JSON on stdin, converts it through this
+    /// implementation's to_message() path, and writes the relay.Message
+    /// JSON on stdout. Used by `relay interop` (RELAY spec §11.2).
+    ///
+    /// Exit codes: 0 = converted, 1 = invalid input, 2 = invalid args.
+    Convert {
+        /// Protocol identifier; must be CAN for this tool.
+        #[arg(long, default_value = "CAN")]
+        protocol: String,
+        /// Output format.
+        #[arg(long, value_enum, default_value = "json")]
         format: OutputFormat,
     },
 }
@@ -117,12 +148,18 @@ async fn run(cli: Cli) -> Result<i32, Box<dyn std::error::Error>> {
             data,
             fd,
             ext,
-        } => cmd_send(iface, id, data, fd, ext).await,
+            xl,
+            sdt,
+            vcid,
+            af,
+            sec,
+        } => cmd_send(iface, id, data, fd, ext, xl, sdt, vcid, af, sec).await,
         Commands::Subscribe {
             iface,
             count,
             format,
         } => cmd_subscribe(iface, count, format).await,
+        Commands::Convert { protocol, format } => cmd_convert(protocol, format),
     }
 }
 
@@ -185,9 +222,9 @@ fn cmd_capabilities() -> Result<i32, Box<dyn std::error::Error>> {
         "protocol_int":        Protocol::Can as i32,
         "version":             env!("CARGO_PKG_VERSION"),
         "spec_version":        rust_can::SPEC_VERSION,
-        "commands":            ["version", "capabilities", "status", "send", "subscribe"],
+        "commands":            ["version", "capabilities", "status", "send", "subscribe", "convert"],
         "transports":          transports,
-        "features":            ["fd", "isotp", "j1939", "safety", "dbc"],
+        "features":            ["fd", "xl", "isotp", "j1939", "safety", "dbc"],
         "interfaces":          ["Bus"],
         "optional_interfaces": ["LoaningBus", "HealthProvider", "MetricsProvider", "Drainer"],
         "adapt":               true,
@@ -231,13 +268,19 @@ fn cmd_status(format: OutputFormat) -> Result<i32, Box<dyn std::error::Error>> {
 // send
 // ---------------------------------------------------------------------------
 
-/// `rust-can send --iface <name> --id <uint> --data <hex> [--fd] [--ext]`
+/// `rust-can send --iface <name> --id <uint> --data <hex> [--fd] [--ext] [--xl ...]`
+#[allow(clippy::too_many_arguments)]
 async fn cmd_send(
     _iface: String,
     id_str: String,
     data_hex: String,
     fd: bool,
     ext: bool,
+    xl: bool,
+    sdt: u8,
+    vcid: u8,
+    af: u32,
+    sec: bool,
 ) -> Result<i32, Box<dyn std::error::Error>> {
     // Parse ID (decimal or 0x-prefixed hex).
     let id: u32 = if id_str.starts_with("0x") || id_str.starts_with("0X") {
@@ -253,6 +296,11 @@ async fn cmd_send(
         id,
         ext,
         fd,
+        xl,
+        sdt,
+        vcid,
+        af,
+        sec,
         data,
         ..Default::default()
     };
@@ -265,10 +313,11 @@ async fn cmd_send(
     bus.send(Context::background(), frame.clone()).await?;
 
     println!(
-        "sent: id=0x{:X} ext={} fd={} data={}",
+        "sent: id=0x{:X} ext={} fd={} xl={} data={}",
         id,
         ext,
         fd,
+        xl,
         hex::encode(&frame.data)
     );
 
@@ -317,6 +366,7 @@ async fn cmd_subscribe(
                             "data":     hex::encode(&frame.data),
                             "ext":      frame.ext,
                             "fd":       frame.fd,
+                            "xl":       frame.xl,
                             "rtr":      frame.rtr,
                             "seq":      received,
                         });
@@ -324,11 +374,12 @@ async fn cmd_subscribe(
                     }
                     OutputFormat::Text => {
                         println!(
-                            "[{}] id=0x{:X} ext={} fd={} data={}",
+                            "[{}] id=0x{:X} ext={} fd={} xl={} data={}",
                             received,
                             frame.id,
                             frame.ext,
                             frame.fd,
+                            frame.xl,
                             hex::encode(&frame.data)
                         );
                     }
@@ -338,5 +389,49 @@ async fn cmd_subscribe(
     }
 
     bus.close().await?;
+    Ok(0)
+}
+
+// ---------------------------------------------------------------------------
+// convert  (RELAY spec §11.2)
+// ---------------------------------------------------------------------------
+
+/// `rust-can convert --protocol CAN [--format json]`
+///
+/// Reads a `can.Frame` JSON object from stdin, converts it through
+/// `to_message()`, and writes the resulting `relay.Message` JSON on stdout.
+///
+/// Exit codes: 0 = converted, 1 = invalid input, 2 = invalid args.
+fn cmd_convert(protocol: String, _format: OutputFormat) -> Result<i32, Box<dyn std::error::Error>> {
+    if !protocol.eq_ignore_ascii_case("CAN") {
+        eprintln!(
+            "rust-can: convert: unsupported protocol '{}'; this tool implements CAN",
+            protocol
+        );
+        // Exit 2 = invalid args per spec §11.2.
+        return Ok(2);
+    }
+
+    // Frame derives Deserialize — parse stdin directly.
+    let frame: Frame = match serde_json::from_reader(std::io::stdin().lock()) {
+        Ok(f) => f,
+        Err(e) => {
+            eprintln!("{}", e);
+            eprintln!("INVALID_ARGUMENT");
+            return Ok(1);
+        }
+    };
+
+    if let Err(e) = rust_can::validate_frame(&frame) {
+        eprintln!("{}", e);
+        eprintln!("INVALID_ARGUMENT");
+        return Ok(1);
+    }
+
+    let mut msg = rust_can::to_message(&frame);
+    // Zero the timestamp per spec §11.2: "timestamp may be zeroed".
+    msg.timestamp = chrono::DateTime::UNIX_EPOCH;
+
+    println!("{}", serde_json::to_string_pretty(&msg)?);
     Ok(0)
 }

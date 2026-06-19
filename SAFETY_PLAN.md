@@ -160,7 +160,7 @@ Applications operating in environments requiring security-level integrity (IEC 6
 
 CAN is a broadcast medium with no physical-layer confidentiality. Encryption on CAN is non-standard and introduces unacceptable latency for safety-critical signals. Confidentiality is a system-level concern (UDS security access, OEM encryption layer). rust-CAN does not add encryption. **Formally risk-accepted** — see `tara.json` T-CAN-06.
 
-## 10. Known Limitations
+## 9. Known Limitations
 
 1. SocketCAN support is Linux-only (`cfg(target_os = "linux")`). macOS/Windows use VirtualBus only.
 2. CAN XL hardware support depends on kernel ≥ 6.0 with XL-capable drivers.
@@ -168,7 +168,7 @@ CAN is a broadcast medium with no physical-layer confidentiality. Encryption on 
 
 ---
 
-## 11. Sign-off
+## 10. Sign-off
 
 | Role                  | Name         | Date       |
 |-----------------------|--------------|------------|

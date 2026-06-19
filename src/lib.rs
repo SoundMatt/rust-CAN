@@ -6,7 +6,7 @@
 //! rust-CAN — CAN bus library for Rust.
 //!
 //! Provides a virtual bus, SocketCAN (Linux), DBC parser, ISO-TP, J1939,
-//! CAN FD, and safety E2E protection. Conforms to RELAY spec v1.1.
+//! CAN FD, and safety E2E protection. Conforms to RELAY spec v1.10.
 //!
 //! # Quick start
 //!
@@ -51,6 +51,10 @@ pub mod relay;
 pub mod safety;
 pub mod uds;
 pub mod virtual_bus;
+/// §13.7.2 standard RELAY module name for the in-process virtual transport.
+pub mod r#virtual {
+    pub use crate::virtual_bus::*;
+}
 
 #[cfg(target_os = "linux")]
 pub mod socketcan;
@@ -68,7 +72,7 @@ pub use safety::HmacSha256Auth;
 pub use safety::MessageAuthenticator;
 
 /// The RELAY spec version this implementation targets.
-pub const SPEC_VERSION: &str = "1.1";
+pub const SPEC_VERSION: &str = "1.10";
 
 /// Alias for `SPEC_VERSION` for explicitness in CLI contexts.
-pub const RELAY_SPEC_VERSION: &str = "1.1";
+pub const RELAY_SPEC_VERSION: &str = "1.10";

@@ -1,6 +1,6 @@
 [package]
 name = "rust-can"
-version = "0.2.0"
+version = "0.2.7"
 edition = "2021"
 description = "rust-CAN: Rust library for CAN bus — virtual bus, SocketCAN, DBC parser, ISO-TP, J1939, CAN FD, and safety E2E protection."
 license = "MPL-2.0"

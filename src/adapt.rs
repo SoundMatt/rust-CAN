@@ -26,7 +26,7 @@ use crate::relay::{BackPressurePolicy, Context, Message, Protocol, SubscriberOpt
 //fusa:req REQ-CAN-007
 //fusa:req REQ-CAN-016
 pub fn to_message(f: &Frame) -> Message {
-    let mut meta = std::collections::HashMap::new();
+    let mut meta = std::collections::BTreeMap::new();
     meta.insert("can.ext".into(), f.ext.to_string());
     meta.insert("can.fd".into(), f.fd.to_string());
     meta.insert("can.rtr".into(), f.rtr.to_string());

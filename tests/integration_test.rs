@@ -903,3 +903,90 @@ fn sec_message_authenticator_trait_is_object_safe() {
     bad[0] ^= 0x01;
     assert!(!auth.verify(key, &bad, &tag));
 }
+
+// ---------------------------------------------------------------------------
+// Convert CLI command (REQ-CAN-015 / RELAY spec §11.2)
+// ---------------------------------------------------------------------------
+
+//fusa:test REQ-CAN-007
+//fusa:test REQ-CAN-015
+#[test]
+fn convert_valid_frame_produces_message() {
+    use rust_can::relay::Protocol;
+
+    let frame = Frame {
+        id: 0x123,
+        ext: false,
+        fd: true,
+        brs: true,
+        data: vec![0xDE, 0xAD, 0xBE, 0xEF],
+        ..Default::default()
+    };
+
+    rust_can::validate_frame(&frame).expect("frame must be valid before convert");
+    let msg = to_message(&frame);
+    assert_eq!(msg.protocol, Protocol::Can);
+    assert_eq!(msg.id, "291"); // 0x123 = 291
+    assert_eq!(msg.payload, vec![0xDE, 0xAD, 0xBE, 0xEF]);
+}
+
+//fusa:sec-test REQ-SEC-001
+//fusa:test REQ-CAN-015
+#[test]
+fn convert_rejects_invalid_frame_before_to_message() {
+    use rust_can::validate_frame;
+
+    // Standard ID out of range — should fail validation, never reach to_message.
+    let bad_frame = Frame {
+        id: 0x800,
+        ..Default::default()
+    };
+    assert!(validate_frame(&bad_frame).is_err());
+
+    // XL + FD mutual exclusion.
+    let xl_fd_frame = Frame {
+        id: 0x100,
+        xl: true,
+        fd: true,
+        data: vec![0u8; 8],
+        ..Default::default()
+    };
+    assert!(validate_frame(&xl_fd_frame).is_err());
+}
+
+// ---------------------------------------------------------------------------
+// CAN XL data length upper bound (REQ-CAN-013)
+// ---------------------------------------------------------------------------
+
+//fusa:test REQ-CAN-013
+#[test]
+fn validate_frame_xl_data_length() {
+    use rust_can::validate_frame;
+
+    // Exactly at max: must pass.
+    assert!(validate_frame(&Frame {
+        id: 0x100,
+        xl: true,
+        data: vec![0u8; 2048],
+        ..Default::default()
+    })
+    .is_ok());
+
+    // One over the limit: must fail.
+    assert!(validate_frame(&Frame {
+        id: 0x100,
+        xl: true,
+        data: vec![0u8; 2049],
+        ..Default::default()
+    })
+    .is_err());
+
+    // Empty XL payload: must fail (XL requires ≥1 byte).
+    assert!(validate_frame(&Frame {
+        id: 0x100,
+        xl: true,
+        data: vec![],
+        ..Default::default()
+    })
+    .is_err());
+}

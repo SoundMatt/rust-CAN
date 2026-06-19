@@ -6,266 +6,429 @@
       "title": "Frame type",
       "text": "The system shall define a CAN frame type carrying ID, flags (Ext, RTR, FD, BRS, ESI, XL), and data payload.",
       "standard": "iso26262",
-      "level": "HLR"
+      "level": "HLR",
+      "asil": "ASIL-B",
+      "verificationMethod": "test"
     },
     {
       "id": "REQ-CAN-002",
       "title": "Filter type",
-      "text": "The system shall define a Filter type for masked ID comparison.",
+      "text": "The system shall define a Filter type for masked ID comparison (id & mask == filter.id & mask).",
       "standard": "iso26262",
-      "level": "HLR"
+      "level": "HLR",
+      "asil": "ASIL-B",
+      "verificationMethod": "test"
     },
     {
       "id": "REQ-CAN-003",
       "title": "Bus interface",
-      "text": "The system shall expose a Bus trait with Send, Subscribe, and Close methods.",
+      "text": "The system shall expose a Bus trait with Send, Subscribe, and Close methods that are object-safe and Send+Sync.",
       "standard": "iso26262",
-      "level": "HLR"
+      "level": "HLR",
+      "asil": "ASIL-B",
+      "verificationMethod": "test"
     },
     {
       "id": "REQ-CAN-004",
       "title": "Frame validation",
-      "text": "The system shall validate CAN frames per RELAY spec §15.1 constraints.",
+      "text": "The system shall validate CAN frames per RELAY spec \u00a715.1 before any transmission; validation shall be performed in validate_frame() and called by every transport send path.",
       "standard": "iso26262",
-      "level": "HLR"
+      "level": "HLR",
+      "asil": "ASIL-B",
+      "verificationMethod": "test"
     },
     {
       "id": "REQ-CAN-005",
       "title": "Error sentinels",
-      "text": "The system shall expose Closed, NotConnected, Timeout, and PayloadTooLarge error variants.",
+      "text": "The system shall expose Closed, NotConnected, Timeout, and PayloadTooLarge error variants as distinct enum members.",
       "standard": "iso26262",
-      "level": "HLR"
+      "level": "HLR",
+      "asil": "ASIL-B",
+      "verificationMethod": "inspection"
     },
     {
       "id": "REQ-CAN-006",
       "title": "Concurrent safety",
-      "text": "The Bus trait implementation shall be safe to call from multiple async tasks concurrently.",
+      "text": "The Bus trait implementation shall be safe to call from multiple async tasks concurrently: send() and subscribe() shall not deadlock or corrupt shared state when called in parallel. Acceptance criterion: a stress test with N>=4 parallel senders on the same bus completes with 0 panics and all frames received.",
       "standard": "iso26262",
-      "level": "HLR"
+      "level": "HLR",
+      "asil": "ASIL-B",
+      "verificationMethod": "test"
     },
     {
       "id": "REQ-CAN-007",
       "title": "RELAY adapter",
-      "text": "The system shall expose adapt(), to_message(), and from_message() for RELAY protocol interoperability.",
+      "text": "The system shall expose adapt(), to_message(), and from_message() for RELAY protocol interoperability; to_message/from_message shall be inverse operations (round-trip identity).",
       "standard": "iso26262",
-      "level": "HLR"
+      "level": "HLR",
+      "asil": "QM",
+      "verificationMethod": "test"
     },
     {
       "id": "REQ-CAN-008",
       "title": "Lifecycle",
-      "text": "Close shall be idempotent; send/subscribe after close shall return Closed error.",
+      "text": "Close shall be idempotent (multiple calls return Ok); send() and subscribe() after close() shall return Error::Closed.",
       "standard": "iso26262",
-      "level": "HLR"
+      "level": "HLR",
+      "asil": "ASIL-B",
+      "verificationMethod": "test"
     },
     {
       "id": "REQ-CAN-009",
       "title": "Standard ID range",
-      "text": "ValidateFrame shall reject standard IDs exceeding 0x7FF.",
+      "text": "validate_frame() shall return Error::InvalidFrame for standard (non-extended) IDs exceeding 0x7FF.",
       "standard": "iso26262",
-      "level": "HLR"
+      "level": "HLR",
+      "asil": "ASIL-B",
+      "parent": "REQ-CAN-004",
+      "verificationMethod": "test"
     },
     {
       "id": "REQ-CAN-010",
       "title": "Extended ID range",
-      "text": "ValidateFrame shall reject extended IDs exceeding 0x1FFFFFFF.",
+      "text": "validate_frame() shall return Error::InvalidFrame for extended IDs exceeding 0x1FFFFFFF.",
       "standard": "iso26262",
-      "level": "HLR"
+      "level": "HLR",
+      "asil": "ASIL-B",
+      "parent": "REQ-CAN-004",
+      "verificationMethod": "test"
     },
     {
       "id": "REQ-CAN-011",
       "title": "BRS/FD constraint",
-      "text": "ValidateFrame shall reject frames with BRS=true and FD=false.",
+      "text": "validate_frame() shall return Error::InvalidFrame for frames with BRS=true and FD=false.",
       "standard": "iso26262",
-      "level": "HLR"
+      "level": "HLR",
+      "asil": "ASIL-B",
+      "parent": "REQ-CAN-004",
+      "verificationMethod": "test"
     },
     {
       "id": "REQ-CAN-012",
       "title": "RTR/FD constraint",
-      "text": "ValidateFrame shall reject frames with RTR=true and FD=true.",
+      "text": "validate_frame() shall return Error::InvalidFrame for frames with RTR=true and FD=true.",
       "standard": "iso26262",
-      "level": "HLR"
+      "level": "HLR",
+      "asil": "ASIL-B",
+      "parent": "REQ-CAN-004",
+      "verificationMethod": "test"
     },
     {
       "id": "REQ-CAN-013",
       "title": "Data length constraint",
-      "text": "ValidateFrame shall reject data payloads exceeding the frame format maximum (8/64/2048).",
+      "text": "validate_frame() shall return Error::InvalidFrame for data payloads exceeding the frame-format maximum: classic CAN >8 bytes, CAN FD >64 bytes, CAN XL >2048 bytes.",
       "standard": "iso26262",
-      "level": "HLR"
+      "level": "HLR",
+      "asil": "ASIL-B",
+      "parent": "REQ-CAN-004",
+      "verificationMethod": "test"
     },
     {
       "id": "REQ-CAN-014",
       "title": "XL/FD mutual exclusion",
-      "text": "ValidateFrame shall reject frames with both XL=true and FD=true.",
+      "text": "validate_frame() shall return Error::InvalidFrame for frames with both XL=true and FD=true.",
       "standard": "iso26262",
-      "level": "HLR"
+      "level": "HLR",
+      "asil": "ASIL-B",
+      "parent": "REQ-CAN-004",
+      "verificationMethod": "test"
     },
     {
       "id": "REQ-VIRT-001",
       "title": "Virtual bus creation",
-      "text": "The system shall provide a VirtualBus that requires no OS dependencies.",
+      "text": "VirtualBus::new() shall succeed without any OS or hardware dependencies (pure in-process).",
       "standard": "iso26262",
-      "level": "HLR"
+      "level": "HLR",
+      "asil": "QM",
+      "verificationMethod": "test"
     },
     {
       "id": "REQ-VIRT-002",
       "title": "Frame broadcast",
-      "text": "Frames sent on the virtual bus shall be broadcast to all matching subscribers.",
+      "text": "Frames sent on the VirtualBus shall be delivered to every subscriber whose filters match.",
       "standard": "iso26262",
-      "level": "HLR"
+      "level": "HLR",
+      "asil": "QM",
+      "verificationMethod": "test"
     },
     {
       "id": "REQ-VIRT-003",
       "title": "Multiple subscribers",
-      "text": "The virtual bus shall support multiple concurrent subscribers with independent channels.",
+      "text": "VirtualBus shall support at least 64 concurrent subscribers with independent receive channels.",
       "standard": "iso26262",
-      "level": "HLR"
+      "level": "HLR",
+      "asil": "QM",
+      "verificationMethod": "test"
     },
     {
       "id": "REQ-VIRT-004",
       "title": "Filter semantics",
-      "text": "The virtual bus shall deliver frames only to subscribers whose filters match.",
+      "text": "VirtualBus shall deliver a frame to a subscriber if and only if: the subscriber has no filters, or (frame.id & filter.mask) == (filter.id & filter.mask) for at least one filter.",
       "standard": "iso26262",
-      "level": "HLR"
+      "level": "HLR",
+      "asil": "QM",
+      "verificationMethod": "test"
     },
     {
       "id": "REQ-VIRT-005",
       "title": "Back-pressure",
-      "text": "The virtual bus shall apply DropNewest, DropOldest, or Block back-pressure policy per subscriber.",
+      "text": "VirtualBus shall apply the subscriber's declared back-pressure policy (DropNewest, DropOldest, or Block) when its channel is full.",
       "standard": "iso26262",
-      "level": "HLR"
+      "level": "HLR",
+      "asil": "QM",
+      "verificationMethod": "test"
     },
     {
       "id": "REQ-ISOTP-001",
       "title": "Single frame",
-      "text": "ISO-TP shall transmit payloads ≤7 bytes in a single CAN frame.",
+      "text": "IsoTpConn.send() shall transmit payloads of 1\u20137 bytes in a single CAN frame with PCI byte N_PCI=0x0N.",
       "standard": "iso26262",
-      "level": "HLR"
+      "level": "HLR",
+      "asil": "QM",
+      "verificationMethod": "test"
     },
     {
       "id": "REQ-ISOTP-002",
       "title": "Multi-frame send",
-      "text": "ISO-TP shall segment payloads >7 bytes into first frame + consecutive frames.",
+      "text": "IsoTpConn.send() shall segment payloads >7 bytes into a first frame (PCI=0x10) followed by consecutive frames (PCI=0x21..0x2F cycling).",
       "standard": "iso26262",
-      "level": "HLR"
+      "level": "HLR",
+      "asil": "QM",
+      "verificationMethod": "test"
     },
     {
       "id": "REQ-ISOTP-003",
       "title": "Flow control",
-      "text": "ISO-TP sender shall process flow control frames for block-size and ST_min pacing.",
+      "text": "IsoTpConn.send() shall pause after the first frame and resume transmission only after receiving a flow-control frame (PCI=0x30); block size and ST_min from the FC frame shall be honoured.",
       "standard": "iso26262",
-      "level": "HLR"
+      "level": "HLR",
+      "asil": "QM",
+      "verificationMethod": "test"
     },
     {
       "id": "REQ-ISOTP-004",
       "title": "Multi-frame receive",
-      "text": "ISO-TP shall reassemble consecutive frames into a single payload.",
+      "text": "IsoTpConn.recv() shall reassemble consecutive frames into the original payload, sending a flow-control frame after the first frame.",
       "standard": "iso26262",
-      "level": "HLR"
+      "level": "HLR",
+      "asil": "QM",
+      "verificationMethod": "test"
     },
     {
       "id": "REQ-ISOTP-005",
       "title": "Timeout",
-      "text": "ISO-TP shall respect context timeouts and return ErrTimeout on expiry.",
+      "text": "IsoTpConn.recv() and the internal flow-control wait shall return Error::Timeout when the caller-supplied context deadline expires; the timeout value shall default to 250 ms when the config timeout is zero.",
       "standard": "iso26262",
-      "level": "HLR"
+      "level": "HLR",
+      "asil": "ASIL-A",
+      "verificationMethod": "test"
     },
     {
       "id": "REQ-J1939-001",
       "title": "29-bit ID decode",
-      "text": "J1939 shall decode priority, PGN, source, and destination from a 29-bit extended CAN ID.",
+      "text": "decode_id() shall extract priority (bits 28\u201326), data page (bit 24), PDU Format (bits 23\u201316), PDU Specific (bits 15\u20138), and source address (bits 7\u20130) from a 29-bit extended CAN ID.",
       "standard": "iso26262",
-      "level": "HLR"
+      "level": "HLR",
+      "asil": "QM",
+      "verificationMethod": "test"
     },
     {
       "id": "REQ-J1939-002",
       "title": "PGN peer-to-peer",
-      "text": "J1939 shall treat PDU Format <240 as peer-to-peer with PS as destination.",
+      "text": "When PDU Format (PF) < 240, decode_id() shall treat PS as the destination address and exclude it from the PGN value.",
       "standard": "iso26262",
-      "level": "HLR"
+      "level": "HLR",
+      "asil": "QM",
+      "verificationMethod": "test"
     },
     {
       "id": "REQ-J1939-003",
       "title": "PGN broadcast",
-      "text": "J1939 shall treat PDU Format ≥240 as broadcast with PS as group extension.",
+      "text": "When PDU Format (PF) >= 240, decode_id() shall treat PS as the group extension and include it in the PGN value.",
       "standard": "iso26262",
-      "level": "HLR"
+      "level": "HLR",
+      "asil": "QM",
+      "verificationMethod": "test"
     },
     {
       "id": "REQ-J1939-004",
       "title": "ID encode",
-      "text": "J1939 shall encode priority, PGN, source, and destination back to a 29-bit ID.",
+      "text": "encode_id() shall produce a 29-bit extended CAN ID such that decode_id(encode_id(p, pgn, src, dst)) returns (p, pgn, src) with dst recoverable from the PS field.",
       "standard": "iso26262",
-      "level": "HLR"
+      "level": "HLR",
+      "asil": "QM",
+      "verificationMethod": "test"
     },
     {
       "id": "REQ-J1939-005",
       "title": "J1939 send/receive",
-      "text": "J1939Bus shall send and receive J1939 frames over an underlying CAN Bus.",
+      "text": "J1939Bus.send() shall encode J1939 frame fields into a 29-bit extended CAN ID and transmit via the underlying Bus. J1939Bus.subscribe() shall decode received frames and present them as J1939Frame values.",
       "standard": "iso26262",
-      "level": "HLR"
+      "level": "HLR",
+      "asil": "QM",
+      "verificationMethod": "test"
     },
     {
       "id": "REQ-J1939-006",
       "title": "PGN filter",
-      "text": "J1939Bus.subscribe shall filter by PGN.",
+      "text": "J1939Receiver shall silently discard received frames whose PGN does not match any entry in the subscriber's PGN filter list; an empty list shall pass all frames.",
       "standard": "iso26262",
-      "level": "HLR"
+      "level": "HLR",
+      "asil": "QM",
+      "verificationMethod": "test"
     },
     {
       "id": "REQ-SAFETY-001",
       "title": "E2E header",
-      "text": "Safety.Protector shall prepend a 10-byte E2E header to every payload.",
+      "text": "Protector.protect() shall prepend a 10-byte E2E header containing DataID (2 bytes), SourceID (2 bytes), SequenceCounter (4 bytes), and CRC-16 (2 bytes) to every payload.",
       "standard": "iso26262",
-      "level": "HLR"
+      "level": "HLR",
+      "asil": "ASIL-B",
+      "verificationMethod": "test"
     },
     {
       "id": "REQ-SAFETY-002",
       "title": "CRC-16 protection",
-      "text": "The E2E header shall include a CRC-16/CCITT-FALSE over the header fields and payload.",
+      "text": "The E2E header CRC field shall be CRC-16/CCITT-FALSE (polynomial 0x1021, initial value 0xFFFF) computed over the first 8 header bytes (CRC slot treated as zero) concatenated with the payload.",
       "standard": "iso26262",
-      "level": "HLR"
+      "level": "HLR",
+      "asil": "ASIL-B",
+      "verificationMethod": "test"
     },
     {
       "id": "REQ-SAFETY-003",
       "title": "Sequence counter",
-      "text": "The E2E header shall include a monotonically increasing sequence counter.",
+      "text": "The E2E header SequenceCounter shall increment by 1 on each call to protect(); the counter shall wrap at 2^32.",
       "standard": "iso26262",
-      "level": "HLR"
+      "level": "HLR",
+      "asil": "ASIL-B",
+      "verificationMethod": "test"
     },
     {
       "id": "REQ-SAFETY-004",
       "title": "CRC validation",
-      "text": "Receiver shall return E2EError::CrcMismatch when the CRC does not match.",
+      "text": "Receiver.unwrap() shall return E2EError{kind: CrcMismatch} when the CRC in the header does not match the CRC computed from the received data.",
       "standard": "iso26262",
-      "level": "HLR"
+      "level": "HLR",
+      "asil": "ASIL-B",
+      "verificationMethod": "test"
     },
     {
       "id": "REQ-SAFETY-005",
       "title": "Sequence gap detection",
-      "text": "Receiver shall return E2EError::SequenceGap when sequence numbers are non-consecutive.",
+      "text": "Receiver.unwrap() shall return E2EError{kind: SequenceGap} when the received sequence counter is not exactly last_counter+1 (modulo 2^32) for non-first frames.",
       "standard": "iso26262",
-      "level": "HLR"
+      "level": "HLR",
+      "asil": "ASIL-B",
+      "verificationMethod": "test"
     },
     {
       "id": "REQ-SAFETY-006",
       "title": "Header too short",
-      "text": "Receiver shall return E2EError::HeaderTooShort when data is shorter than 10 bytes.",
+      "text": "Receiver.unwrap() shall return E2EError{kind: HeaderTooShort} when the input data is fewer than 10 bytes.",
       "standard": "iso26262",
-      "level": "HLR"
+      "level": "HLR",
+      "asil": "ASIL-B",
+      "verificationMethod": "test"
     },
     {
       "id": "REQ-DBC-001",
       "title": "DBC parse",
-      "text": "The DBC parser shall parse BO_ message blocks and SG_ signal definitions.",
+      "text": "parse() shall parse BO_ message blocks (id, name, DLC, sender) and SG_ signal definitions (name, start_bit, length, byte_order, value_type, factor, offset, min, max, unit) from DBC file text.",
       "standard": "iso26262",
-      "level": "HLR"
+      "level": "HLR",
+      "asil": "QM",
+      "verificationMethod": "test"
     },
     {
       "id": "REQ-DBC-002",
       "title": "Signal decode",
-      "text": "The DBC parser shall decode signal values from CAN frame data using start bit, length, byte order, factor, and offset.",
+      "text": "DbcDatabase.decode() shall compute physical_value = raw * factor + offset for each signal in a message, extracting the raw value from the frame data using start_bit, length, and byte_order (Intel or Motorola).",
       "standard": "iso26262",
-      "level": "HLR"
+      "level": "HLR",
+      "asil": "QM",
+      "verificationMethod": "test"
+    },
+    {
+      "id": "REQ-SEC-001",
+      "title": "Frame ID bounds \u2014 injection prevention",
+      "text": "All external CAN frame IDs received from untrusted sources shall be validated by validate_frame() before processing; frames with out-of-range IDs shall be rejected with Error::InvalidFrame and shall not be forwarded to any subscriber.",
+      "standard": "iso26262",
+      "level": "HLR",
+      "asil": "ASIL-B",
+      "verificationMethod": "sec-test",
+      "cal": "CAL-3"
+    },
+    {
+      "id": "REQ-SEC-002",
+      "title": "E2E CRC tamper detection",
+      "text": "Any modification of a single bit in a protected payload or header shall be detected by Receiver.unwrap() with probability >= 1 - 2^-16 per the CRC-16/CCITT-FALSE Hamming distance properties.",
+      "standard": "iso26262",
+      "level": "HLR",
+      "asil": "ASIL-B",
+      "verificationMethod": "sec-test",
+      "cal": "CAL-3"
+    },
+    {
+      "id": "REQ-SEC-003",
+      "title": "Replay detection",
+      "text": "Receiver.unwrap() shall reject frames whose sequence counter does not advance monotonically, preventing replay of previously captured protected frames.",
+      "standard": "iso26262",
+      "level": "HLR",
+      "asil": "ASIL-B",
+      "verificationMethod": "sec-test",
+      "cal": "CAL-3"
+    },
+    {
+      "id": "REQ-SEC-004",
+      "title": "Resource exhaustion prevention",
+      "text": "IsoTpConn.recv() shall bound its wait time by the configured timeout (default 250 ms); it shall not block indefinitely regardless of the frame arrival pattern.",
+      "standard": "iso26262",
+      "level": "HLR",
+      "asil": "ASIL-A",
+      "verificationMethod": "sec-test",
+      "cal": "CAL-2"
+    },
+    {
+      "id": "REQ-SEC-005",
+      "title": "Input validation on DBC parse",
+      "text": "parse() shall return Error::Other for malformed BO_ or SG_ lines; it shall not panic on any input string.",
+      "standard": "iso26262",
+      "level": "HLR",
+      "asil": "QM",
+      "verificationMethod": "sec-test",
+      "cal": "CAL-2"
+    },
+    {
+      "id": "REQ-SEC-006",
+      "title": "Cryptographic message authentication interface",
+      "text": "The safety module SHALL expose a MessageAuthenticator trait that callers can implement using HMAC-SHA256 or AES-CMAC. The E2E CRC-16 layer MUST be documented as a safety control only (random error detection); it SHALL NOT be represented as a security control against adversarial forgery. Applications operating at IEC 62443 SL-2 or ISO/SAE 21434 CAL-3 SHALL use a keyed MAC in addition to CRC-16.",
+      "standard": "iso26262",
+      "level": "HLR",
+      "asil": "ASIL-B",
+      "cal": "CAL-3",
+      "verificationMethod": "inspection",
+      "rationale": "CRC-16 has no keying material; an adversary who observes frames can forge a valid CRC (T-CAN-02, T-CAN-05). A trait-based interface allows callers to plug in HMAC without adding a crypto dependency to rust-CAN itself."
+    },
+    {
+      "id": "REQ-SEC-007",
+      "title": "Per-subscriber frame rate limiting",
+      "text": "When SubscriberOptions.rate_limit_per_sec is non-zero, the bus SHALL drop frames delivered to that subscriber that exceed the configured rate within any 1-second window. Dropped frames SHALL be counted in the bus drop_count metric. This provides defence-in-depth against frame-flooding DoS attacks (T-CAN-07).",
+      "standard": "iso26262",
+      "level": "HLR",
+      "asil": "ASIL-A",
+      "cal": "CAL-3",
+      "verificationMethod": "sec-test"
+    },
+    {
+      "id": "REQ-SEC-008",
+      "title": "Bus-off state detection and exposure",
+      "text": "The bus implementation SHALL detect CAN controller bus-off conditions and return Error::BusOff to the caller. The application SHALL be notified so it can implement a recovery policy (e.g., bus reset, watchdog trigger). Bus-off recovery itself is out of scope for the library.",
+      "standard": "iso26262",
+      "level": "HLR",
+      "asil": "ASIL-A",
+      "cal": "CAL-3",
+      "verificationMethod": "inspection"
     }
   ]
 }

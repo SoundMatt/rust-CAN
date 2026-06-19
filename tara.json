@@ -1,58 +1,326 @@
 {
-  "entries": [
+  "project": "rust-CAN",
+  "standard": "ISO/SAE 21434:2021",
+  "createdAt": "2026-06-19T00:00:00Z",
+  "scope": "rust-CAN is a software library component used in road-vehicle ECUs. This TARA covers cybersecurity threats arising from rust-CAN's CAN bus interface when integrated into an ECU that communicates on an in-vehicle CAN network. System-level CAL may differ after architectural decomposition. Eavesdropping (T-CAN-06) is risk-accepted at library level — confidentiality is a physical/system concern.",
+
+  "assets": [
     {
-      "category": "integrity",
-      "stride": "T",
-      "threat": "Attacker injects malformed CAN frames via SocketCAN interface to cause buffer overread",
-      "cwe": "CWE-125",
-      "riskRating": "HIGH",
-      "mitigation": "validate_frame called before every send; data length bounded by CAN_XL_MAX_DATA_LEN=2048",
-      "sourceRule": "CYBER003"
+      "id": "A-001",
+      "name": "CAN frame integrity",
+      "description": "Correctness of frame IDs, DLC, and payload bytes as seen by the application",
+      "cybersecurityProperty": "Integrity"
     },
     {
-      "category": "integrity",
-      "stride": "T",
-      "threat": "Attacker replays captured safety-critical E2E-protected messages",
-      "cwe": "CWE-294",
-      "riskRating": "HIGH",
-      "mitigation": "E2E sequence counter (REQ-SAFETY-003) and gap detection (REQ-SAFETY-005) prevent replay",
-      "sourceRule": "CYBER004"
+      "id": "A-002",
+      "name": "E2E-protected payload authenticity",
+      "description": "Guarantee that Receiver.unwrap() payloads originate from a genuine Protector with correct sequence",
+      "cybersecurityProperty": "Integrity"
     },
     {
-      "category": "integrity",
-      "stride": "T",
-      "threat": "Silent data corruption in CAN payload undetected by upper layer",
-      "cwe": "CWE-354",
-      "riskRating": "HIGH",
-      "mitigation": "CRC-16/CCITT-FALSE E2E header (REQ-SAFETY-002) detects single and burst errors",
-      "sourceRule": "CYBER005"
+      "id": "A-003",
+      "name": "CAN bus availability",
+      "description": "Continuous, timely delivery of CAN frames to all subscribers; bus not blocked or saturated",
+      "cybersecurityProperty": "Availability"
     },
     {
-      "category": "availability",
-      "stride": "D",
-      "threat": "Bus flooding: high-frequency sends saturate subscriber channels causing frame loss",
-      "cwe": "CWE-400",
-      "riskRating": "MEDIUM",
-      "mitigation": "Back-pressure policy (REQ-VIRT-005) and drop_count MetricsProvider field for monitoring",
-      "sourceRule": "CYBER006"
+      "id": "A-004",
+      "name": "ISO-TP session availability",
+      "description": "ISO-TP receive tasks complete within the configured timeout and release the Tokio runtime",
+      "cybersecurityProperty": "Availability"
     },
     {
-      "category": "availability",
-      "stride": "D",
-      "threat": "ISO-TP DoS: attacker sends First Frame but no Consecutive Frames, blocking Recv indefinitely",
-      "cwe": "CWE-400",
-      "riskRating": "MEDIUM",
-      "mitigation": "Context-based timeout (REQ-ISOTP-005) bounds all blocking receive operations",
-      "sourceRule": "CYBER007"
+      "id": "A-005",
+      "name": "DBC parser robustness",
+      "description": "DBC parse() does not panic or leak memory on any input",
+      "cybersecurityProperty": "Availability"
+    }
+  ],
+
+  "threatScenarios": [
+    {
+      "id": "T-CAN-01",
+      "title": "Frame injection — invalid ID or DLC",
+      "asset": "A-001",
+      "property": "Integrity",
+      "stride": "Tampering",
+      "description": "An attacker on the CAN bus injects frames with out-of-range IDs or invalid DLC values to corrupt application state or cause unexpected behaviour in downstream consumers.",
+      "attackPath": "Attacker gains physical or logical access to the CAN bus; crafts raw frames with id > 0x7FF (standard) or id > 0x1FFFFFFF (extended); sends frames before validate_frame() can gate them.",
+      "impact": {
+        "safety": "Severe",
+        "financial": "Moderate",
+        "operational": "Major",
+        "privacy": "Negligible"
+      },
+      "impactRating": 3,
+      "attackFeasibility": {
+        "elapsedTime": "< 1 day",
+        "expertise": "Proficient",
+        "knowledgeOfItem": "Public",
+        "windowOfOpportunity": "Easy",
+        "equipment": "Standard"
+      },
+      "feasibilityRating": "High",
+      "cal": "CAL-3",
+      "cybersecurityGoal": "CSG-CAN-01",
+      "mitigations": ["REQ-SEC-001"],
+      "residualRisk": "Low — validate_frame() is the mandatory gate before any send path"
     },
     {
-      "category": "integrity",
-      "stride": "S",
-      "threat": "Spoofed CAN frame with forged source address on J1939 bus",
-      "cwe": "CWE-290",
-      "riskRating": "MEDIUM",
-      "mitigation": "Application layer must use E2E protection (safety module) for authenticated payloads; J1939 source address is informational only",
-      "sourceRule": "CYBER008"
+      "id": "T-CAN-02",
+      "title": "Payload tampering — active man-in-the-middle",
+      "asset": "A-002",
+      "property": "Integrity",
+      "stride": "Tampering",
+      "description": "An attacker intercepts and modifies payload bytes of an E2E-protected frame. The CRC-16 does not provide keyed authentication; an attacker who observes frames can re-compute a valid CRC for a forged payload.",
+      "attackPath": "Attacker sniffs CAN traffic to learn frame structure; modifies payload bytes; re-computes CRC-16 over forged bytes (trivial — no key material); re-injects frame.",
+      "impact": {
+        "safety": "Severe",
+        "financial": "Moderate",
+        "operational": "Major",
+        "privacy": "Negligible"
+      },
+      "impactRating": 3,
+      "attackFeasibility": {
+        "elapsedTime": "< 1 week",
+        "expertise": "Expert",
+        "knowledgeOfItem": "Restricted",
+        "windowOfOpportunity": "Moderate",
+        "equipment": "Bespoke"
+      },
+      "feasibilityRating": "Medium",
+      "cal": "CAL-3",
+      "cybersecurityGoal": "CSG-CAN-02",
+      "mitigations": ["REQ-SEC-002", "REQ-SEC-006"],
+      "note": "REQ-SEC-002 mitigates random errors (safety). REQ-SEC-006 (cryptographic MAC) is required to mitigate adversarial forgery. CRC-16 alone is INSUFFICIENT for security-level integrity against an active adversary.",
+      "residualRisk": "Medium (CRC only) → Low (with HMAC per REQ-SEC-006)"
+    },
+    {
+      "id": "T-CAN-03",
+      "title": "Replay attack — re-injection of captured frames",
+      "asset": "A-002",
+      "property": "Integrity",
+      "stride": "Repudiation",
+      "description": "An attacker captures a legitimately protected frame and re-injects it at a later time to replay a past command (e.g., a previously-valid brake-release).",
+      "attackPath": "Attacker records frames during normal operation; replays one or more frames at a chosen later time.",
+      "impact": {
+        "safety": "Severe",
+        "financial": "Moderate",
+        "operational": "Major",
+        "privacy": "Negligible"
+      },
+      "impactRating": 3,
+      "attackFeasibility": {
+        "elapsedTime": "< 1 week",
+        "expertise": "Proficient",
+        "knowledgeOfItem": "Public",
+        "windowOfOpportunity": "Easy",
+        "equipment": "Standard"
+      },
+      "feasibilityRating": "High",
+      "cal": "CAL-3",
+      "cybersecurityGoal": "CSG-CAN-02",
+      "mitigations": ["REQ-SEC-003"],
+      "residualRisk": "Low — monotonic 32-bit counter rejected by Receiver; wrap at 2^32 documented in .fusa-hara.json H-CAN-03"
+    },
+    {
+      "id": "T-CAN-04",
+      "title": "Bus-off DoS — dominant-bit flooding",
+      "asset": "A-003",
+      "property": "Availability",
+      "stride": "Denial of Service",
+      "description": "An attacker (or faulty node) repeatedly transmits dominant bits to cause CAN error frames, pushing the target ECU's transmit error counter above 255 into bus-off state.",
+      "attackPath": "Attacker node sends malformed CAN frames at high rate; CAN controller error counters increment; at TEC > 255 the controller enters bus-off and stops transmitting.",
+      "impact": {
+        "safety": "Major",
+        "financial": "Major",
+        "operational": "Severe",
+        "privacy": "Negligible"
+      },
+      "impactRating": 3,
+      "attackFeasibility": {
+        "elapsedTime": "< 1 day",
+        "expertise": "Proficient",
+        "knowledgeOfItem": "Public",
+        "windowOfOpportunity": "Easy",
+        "equipment": "Standard"
+      },
+      "feasibilityRating": "High",
+      "cal": "CAL-3",
+      "cybersecurityGoal": "CSG-CAN-03",
+      "mitigations": ["REQ-SEC-008"],
+      "note": "Bus-off recovery is a hardware/kernel responsibility. rust-CAN exposes Error::BusOff so applications can detect and respond. Physical isolation requires system-level controls outside library scope.",
+      "residualRisk": "Medium — application must implement recovery policy; rust-CAN provides detection via Error::BusOff"
+    },
+    {
+      "id": "T-CAN-05",
+      "title": "Node impersonation — CAN ID spoofing",
+      "asset": "A-002",
+      "property": "Integrity",
+      "stride": "Spoofing",
+      "description": "CAN has no built-in source authentication. Any node on the bus can transmit frames with any CAN ID. An attacker impersonates a trusted ECU by sending frames with its CAN ID.",
+      "attackPath": "Attacker connects a rogue node; transmits frames with a stolen or guessed CAN ID; application receives frames it believes are from a trusted source.",
+      "impact": {
+        "safety": "Severe",
+        "financial": "Moderate",
+        "operational": "Major",
+        "privacy": "Negligible"
+      },
+      "impactRating": 3,
+      "attackFeasibility": {
+        "elapsedTime": "< 1 week",
+        "expertise": "Expert",
+        "knowledgeOfItem": "Restricted",
+        "windowOfOpportunity": "Moderate",
+        "equipment": "Bespoke"
+      },
+      "feasibilityRating": "Medium",
+      "cal": "CAL-3",
+      "cybersecurityGoal": "CSG-CAN-02",
+      "mitigations": ["REQ-SEC-006"],
+      "note": "CAN ID validation (REQ-SEC-001) only rejects structurally invalid IDs; it cannot authenticate the source. Mitigation requires a cryptographic MAC keyed per-node (REQ-SEC-006). System-level: HSM-backed key management is out of rust-CAN library scope.",
+      "residualRisk": "Medium — fully mitigated only with per-node HMAC keys (REQ-SEC-006 + system key management)"
+    },
+    {
+      "id": "T-CAN-06",
+      "title": "Eavesdropping — passive traffic capture",
+      "asset": "A-001",
+      "property": "Confidentiality",
+      "stride": "Information Disclosure",
+      "description": "CAN is a broadcast medium. Any node on the bus can receive all frames. An attacker with physical access can passively capture all traffic.",
+      "attackPath": "Attacker attaches a CAN analyser to the bus; captures all frames including safety-critical and diagnostic traffic.",
+      "impact": {
+        "safety": "Negligible",
+        "financial": "Moderate",
+        "operational": "Moderate",
+        "privacy": "Major"
+      },
+      "impactRating": 2,
+      "attackFeasibility": {
+        "elapsedTime": "< 1 day",
+        "expertise": "Layman",
+        "knowledgeOfItem": "Public",
+        "windowOfOpportunity": "Easy",
+        "equipment": "Standard"
+      },
+      "feasibilityRating": "High",
+      "cal": "CAL-2",
+      "cybersecurityGoal": null,
+      "riskAcceptance": {
+        "accepted": true,
+        "rationale": "CAN is inherently a broadcast medium with no confidentiality at the physical layer. Encryption on CAN is non-standard and adds significant latency for safety-critical signals. Confidentiality of diagnostic data is a system-level concern (e.g., UDS security access). rust-CAN is a transport library and does not add encryption. Applications with confidentiality requirements SHALL use application-layer encryption outside rust-CAN scope.",
+        "reviewer": "Matt Jones",
+        "date": "2026-06-19"
+      },
+      "residualRisk": "Accepted — physical access assumed for in-vehicle systems; OEM security architecture handles encryption at system level"
+    },
+    {
+      "id": "T-CAN-07",
+      "title": "Frame-flooding DoS — subscriber saturation",
+      "asset": "A-003",
+      "property": "Availability",
+      "stride": "Denial of Service",
+      "description": "An attacker floods the CAN bus with valid frames at a rate exceeding the subscriber's processing capacity, causing buffer overflow and silent frame drops.",
+      "attackPath": "Attacker sends frames at bus maximum rate (1 Mbit/s ≈ 10000 standard frames/sec); subscriber queue fills; frames are dropped silently under DropNewest policy.",
+      "impact": {
+        "safety": "Major",
+        "financial": "Moderate",
+        "operational": "Severe",
+        "privacy": "Negligible"
+      },
+      "impactRating": 3,
+      "attackFeasibility": {
+        "elapsedTime": "< 1 day",
+        "expertise": "Proficient",
+        "knowledgeOfItem": "Public",
+        "windowOfOpportunity": "Easy",
+        "equipment": "Standard"
+      },
+      "feasibilityRating": "High",
+      "cal": "CAL-3",
+      "cybersecurityGoal": "CSG-CAN-03",
+      "mitigations": ["REQ-SEC-007"],
+      "residualRisk": "Low — per-subscriber rate limit enforced in SubInner::push()"
+    },
+    {
+      "id": "T-CAN-08",
+      "title": "ISO-TP session exhaustion — incomplete multi-frame transfer",
+      "asset": "A-004",
+      "property": "Availability",
+      "stride": "Denial of Service",
+      "description": "An attacker sends an ISO-TP First Frame but withholds Consecutive Frames, causing IsoTpConn.recv() to block until timeout on every call.",
+      "attackPath": "Attacker sends FF with large length; holds open the session; ISO-TP receiver waits; multiple parallel sessions exhaust Tokio task resources.",
+      "impact": {
+        "safety": "Major",
+        "financial": "Moderate",
+        "operational": "Major",
+        "privacy": "Negligible"
+      },
+      "impactRating": 2,
+      "attackFeasibility": {
+        "elapsedTime": "< 1 day",
+        "expertise": "Proficient",
+        "knowledgeOfItem": "Public",
+        "windowOfOpportunity": "Easy",
+        "equipment": "Standard"
+      },
+      "feasibilityRating": "High",
+      "cal": "CAL-2",
+      "cybersecurityGoal": "CSG-CAN-03",
+      "mitigations": ["REQ-SEC-004"],
+      "residualRisk": "Low — timeout bounds blocking to 250 ms (default)"
+    },
+    {
+      "id": "T-CAN-09",
+      "title": "DBC parser crash — malformed input",
+      "asset": "A-005",
+      "property": "Availability",
+      "stride": "Denial of Service",
+      "description": "An attacker supplies a malformed DBC file (e.g., via a compromised OTA update or diagnostic session) causing parse() to panic, crash the process, or consume unbounded memory.",
+      "attackPath": "Attacker delivers crafted DBC bytes through a diagnostic channel or file-system path; parse() encounters unexpected input and panics.",
+      "impact": {
+        "safety": "Moderate",
+        "financial": "Negligible",
+        "operational": "Major",
+        "privacy": "Negligible"
+      },
+      "impactRating": 2,
+      "attackFeasibility": {
+        "elapsedTime": "< 1 day",
+        "expertise": "Proficient",
+        "knowledgeOfItem": "Public",
+        "windowOfOpportunity": "Moderate",
+        "equipment": "Standard"
+      },
+      "feasibilityRating": "High",
+      "cal": "CAL-2",
+      "cybersecurityGoal": "CSG-CAN-03",
+      "mitigations": ["REQ-SEC-005"],
+      "residualRisk": "Low — parse() returns Err on all malformed inputs; sec-test confirmed"
+    }
+  ],
+
+  "cybersecurityGoals": [
+    {
+      "id": "CSG-CAN-01",
+      "description": "rust-CAN shall reject all CAN frames with structurally invalid IDs or DLC before they reach any subscriber or transport layer.",
+      "cal": "CAL-3",
+      "threats": ["T-CAN-01"],
+      "requirements": ["REQ-SEC-001"]
+    },
+    {
+      "id": "CSG-CAN-02",
+      "description": "rust-CAN shall provide mechanisms to detect and reject tampered, replayed, or spoofed protected messages. Safety-level detection (CRC-16) is provided natively; security-level detection (cryptographic MAC) requires application integration of the MessageAuthenticator interface.",
+      "cal": "CAL-3",
+      "threats": ["T-CAN-02", "T-CAN-03", "T-CAN-05"],
+      "requirements": ["REQ-SEC-002", "REQ-SEC-003", "REQ-SEC-006"]
+    },
+    {
+      "id": "CSG-CAN-03",
+      "description": "rust-CAN shall resist resource-exhaustion and flooding attacks by enforcing per-subscriber rate limits, bounding all blocking operations with timeouts, and exposing bus-off state to the application.",
+      "cal": "CAL-3",
+      "threats": ["T-CAN-04", "T-CAN-07", "T-CAN-08", "T-CAN-09"],
+      "requirements": ["REQ-SEC-004", "REQ-SEC-005", "REQ-SEC-007", "REQ-SEC-008"]
     }
   ]
 }

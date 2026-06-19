@@ -95,6 +95,7 @@ impl DbcDatabase {
 /// Recognises `BO_` (message) and `SG_` (signal) lines; all other content
 /// is ignored. This is a line-by-line parser — not a full DBC grammar.
 //fusa:req REQ-DBC-001
+//fusa:req REQ-SEC-005
 pub fn parse(input: &str) -> Result<DbcDatabase, Error> {
     let mut db = DbcDatabase::default();
     let mut current_msg: Option<DbcMessage> = None;

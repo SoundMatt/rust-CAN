@@ -2,32 +2,42 @@
   "project": "rust-CAN",
   "standard": "ISO 26262",
   "createdAt": "2026-06-18T00:00:00Z",
+  "updatedAt": "2026-06-19T00:00:00Z",
+  "scope": "rust-CAN is a software library component. This HARA covers the contribution of rust-CAN to system-level hazards when integrated into a road-vehicle ECU. ASIL classification applies to the rust-CAN software partition only; system-level ASIL may differ after architectural decomposition per ISO 26262-9.",
   "operationalSituations": [
     {
       "id": "OS-001",
-      "description": "Normal operation — CAN bus active, frames being sent and received"
+      "description": "Normal operation — CAN bus active, frames being sent and received by application tasks"
     },
     {
       "id": "OS-002",
-      "description": "Bus initialisation — connection being established"
+      "description": "Bus initialisation — socket or virtual bus connection being established, no frames yet"
     },
     {
       "id": "OS-003",
-      "description": "Bus shutdown — close() called, subscribers draining"
+      "description": "Bus shutdown — close() called; subscribers are being drained and deallocated"
     }
   ],
   "hazards": [
     {
       "id": "H-CAN-01",
-      "description": "Malformed CAN frame transmitted to the bus (invalid ID, bad DLC, protocol constraint violated)",
+      "description": "Malformed CAN frame transmitted to the physical bus (invalid ID, bad DLC, protocol constraint violated)",
       "situations": ["OS-001"],
       "risk": {
         "severity": "S2",
+        "severityJustification": "A malformed frame can corrupt ongoing transmission and may force error-passive state on bus participants. Bus-level disruption in a vehicle can affect secondary safety systems (e.g., stability control) but a single node failure is controllable by the driver — S3 would require loss of vehicle control without driver ability to react.",
         "exposure": "E3",
+        "exposureJustification": "CAN bus is active for a significant fraction of the operating time (>1% but not continuous in all modes); typical drive cycle has frequent CAN activity.",
         "controllability": "C2",
-        "asil": "ASIL-B"
+        "controllabilityJustification": "Most drivers can react to a transient bus disruption by slowing down; some may not notice a brief disruption in a non-critical secondary system.",
+        "asil": "ASIL-B",
+        "ftti": "100 ms"
       },
-      "safetyGoals": ["SG-CAN-01"]
+      "safetyGoals": ["SG-CAN-01"],
+      "mitigations": [
+        "validate_frame() enforces all RELAY §15.1 constraints before any call to the transport send path",
+        "SocketCAN kernel driver provides a second layer of frame validation at the socket level"
+      ]
     },
     {
       "id": "H-CAN-02",
@@ -35,11 +45,19 @@
       "situations": ["OS-001"],
       "risk": {
         "severity": "S3",
+        "severityJustification": "Undetected payload corruption in a safety-critical message (e.g., brake command, steering torque) can lead to loss of vehicle control without opportunity for corrective action.",
         "exposure": "E2",
+        "exposureJustification": "E2E protection is used selectively on safety-critical signals; random bit errors on CAN are infrequent but non-zero over the lifetime of the vehicle.",
         "controllability": "C2",
-        "asil": "ASIL-B"
+        "controllabilityJustification": "Driver may be able to detect abnormal vehicle behaviour if the error persists but a single corrupted frame may act before the driver can react.",
+        "asil": "ASIL-B",
+        "ftti": "50 ms"
       },
-      "safetyGoals": ["SG-CAN-02"]
+      "safetyGoals": ["SG-CAN-02"],
+      "mitigations": [
+        "CRC-16/CCITT-FALSE over header and payload detects single-bit errors with probability 1",
+        "CRC provides Hamming distance ≥ 4 for message lengths up to 32767 bits"
+      ]
     },
     {
       "id": "H-CAN-03",
@@ -47,11 +65,19 @@
       "situations": ["OS-001"],
       "risk": {
         "severity": "S3",
+        "severityJustification": "A replayed safety command (e.g., an old brake-release message) could suppress an active safety function at a critical moment.",
         "exposure": "E2",
+        "exposureJustification": "Replay attacks require deliberate action; accidental replay can occur if a transmitter restarts and re-sends from counter 0.",
         "controllability": "C2",
-        "asil": "ASIL-B"
+        "controllabilityJustification": "Vehicle behaviour may seem normal initially before the effect of the replayed command becomes apparent.",
+        "asil": "ASIL-B",
+        "ftti": "50 ms"
       },
-      "safetyGoals": ["SG-CAN-02"]
+      "safetyGoals": ["SG-CAN-02"],
+      "mitigations": [
+        "32-bit monotonic sequence counter in the E2E header; Receiver rejects non-consecutive counters",
+        "Counter wrap (at 2^32) is a known limitation; applications requiring wrap detection shall reset the Receiver or implement application-level sequence management"
+      ]
     },
     {
       "id": "H-CAN-04",
@@ -59,11 +85,16 @@
       "situations": ["OS-001"],
       "risk": {
         "severity": "S1",
+        "severityJustification": "Dropped frames on a non-safety CAN channel cause data gaps but do not directly lead to physical harm; safety-critical channels should use the E2E sequence counter to detect gaps.",
         "exposure": "E4",
+        "exposureJustification": "Subscriber backlog is possible any time the consumer is slower than the producer.",
         "controllability": "C3",
-        "asil": "QM"
+        "controllabilityJustification": "Application developer can select the appropriate back-pressure policy; end users have no direct control.",
+        "asil": "QM",
+        "ftti": null
       },
-      "safetyGoals": []
+      "safetyGoals": [],
+      "qmRationale": "S1 × E4 × C3 maps to QM per ISO 26262-3 Table 4. No safety goal is required. Applications using rust-CAN for safety-critical subscriptions shall use the E2E layer (REQ-SAFETY-005) to detect sequence gaps caused by dropped frames. This is documented in SAFETY_PLAN.md §8 Known Limitations."
     },
     {
       "id": "H-CAN-05",
@@ -71,34 +102,45 @@
       "situations": ["OS-001"],
       "risk": {
         "severity": "S2",
+        "severityJustification": "A permanently blocked receive task can starve other safety-relevant tasks in the same Tokio runtime, causing latency violations in secondary functions.",
         "exposure": "E2",
+        "exposureJustification": "Multi-frame ISO-TP receive is used less frequently than single-frame CAN traffic.",
         "controllability": "C1",
-        "asil": "ASIL-A"
+        "controllabilityJustification": "A task that blocks indefinitely is fully controllable by the system watchdog or timeout mechanism; the standard ISO-TP timeout is 250 ms.",
+        "asil": "ASIL-A",
+        "ftti": "250 ms"
       },
-      "safetyGoals": ["SG-CAN-03"]
+      "safetyGoals": ["SG-CAN-03"],
+      "mitigations": [
+        "IsoTpConn.recv() wraps all waits in tokio::time::timeout using the configured deadline (default 250 ms)",
+        "Error::Timeout is returned to the caller; the Tokio task is released and the runtime is not starved"
+      ]
     }
   ],
   "safetyGoals": [
     {
       "id": "SG-CAN-01",
-      "description": "rust-CAN shall reject all frames that violate CAN protocol constraints before transmission",
+      "description": "rust-CAN shall reject all CAN frames that violate RELAY §15.1 protocol constraints before transmission",
       "hazards": ["H-CAN-01"],
       "asil": "ASIL-B",
-      "safeState": "Frame is rejected with InvalidFrame error; no transmission occurs"
+      "safeState": "Frame is rejected with Error::InvalidFrame; no transmission occurs on the physical bus",
+      "requirements": ["REQ-CAN-004", "REQ-CAN-009", "REQ-CAN-010", "REQ-CAN-011", "REQ-CAN-012", "REQ-CAN-013", "REQ-CAN-014"]
     },
     {
       "id": "SG-CAN-02",
-      "description": "rust-CAN E2E protection shall detect payload corruption and replay attacks",
+      "description": "rust-CAN E2E protection shall detect payload corruption, tampering, and replay attacks with probability ≥ 1 − 2^−16",
       "hazards": ["H-CAN-02", "H-CAN-03"],
       "asil": "ASIL-B",
-      "safeState": "Corrupted or replayed data is rejected with E2EError; payload is not forwarded to application"
+      "safeState": "Corrupted or replayed data is rejected with E2EError; the payload is not forwarded to the application",
+      "requirements": ["REQ-SAFETY-001", "REQ-SAFETY-002", "REQ-SAFETY-003", "REQ-SAFETY-004", "REQ-SAFETY-005", "REQ-SAFETY-006"]
     },
     {
       "id": "SG-CAN-03",
-      "description": "rust-CAN shall bound all blocking receive operations by the caller-supplied context deadline",
+      "description": "rust-CAN shall bound all blocking receive operations by the caller-supplied context deadline (default 250 ms)",
       "hazards": ["H-CAN-05"],
       "asil": "ASIL-A",
-      "safeState": "Timeout returns ErrTimeout; caller can retry or escalate"
+      "safeState": "Error::Timeout is returned; the Tokio task is released and the runtime continues to schedule other tasks",
+      "requirements": ["REQ-ISOTP-005"]
     }
   ]
 }

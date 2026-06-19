@@ -22,8 +22,50 @@ use std::sync::{
 
 use crate::crc::crc16_ccitt_false;
 
+#[cfg(feature = "hmac-auth")]
+pub mod hmac_auth;
+#[cfg(feature = "hmac-auth")]
+pub use hmac_auth::HmacSha256Auth;
+
 /// Size of the E2E header in bytes.
 const HEADER_SIZE: usize = 10;
+
+// ---------------------------------------------------------------------------
+// MessageAuthenticator
+// ---------------------------------------------------------------------------
+
+/// Pluggable cryptographic message authentication interface (REQ-SEC-006).
+///
+/// # Safety vs. Security scope
+///
+/// The `Protector`/`Receiver` pair uses CRC-16/CCITT-FALSE as its integrity
+/// mechanism. CRC-16 is a **safety** control (ISO 26262): it detects random
+/// transmission errors with Hamming distance ≥ 4 for messages up to 32767 bits.
+///
+/// CRC-16 is **not a security control**. An adversary who can observe frames
+/// can trivially compute a valid CRC for any forged payload because there is no
+/// keying material. Applications operating in environments where active
+/// adversaries are a concern (IEC 62443 SL-2 or higher / ISO/SAE 21434 CAL-3)
+/// MUST use a cryptographic MAC in addition to, or instead of, the CRC layer.
+///
+/// Implement this trait using HMAC-SHA256 or AES-CMAC and pass the
+/// authenticator to a `SecureProtector`/`SecureReceiver` (future extension).
+/// The tag returned by `sign()` should be appended after the E2E header and
+/// before the payload.
+//fusa:req REQ-SEC-006
+pub trait MessageAuthenticator: Send + Sync {
+    /// Compute a MAC tag over `data` using `key`.
+    fn sign(&self, key: &[u8], data: &[u8]) -> Vec<u8>;
+
+    /// Verify that `tag` is a valid MAC for `data` under `key`.
+    ///
+    /// Implementations MUST use a constant-time comparison to prevent
+    /// timing side-channels.
+    fn verify(&self, key: &[u8], data: &[u8], tag: &[u8]) -> bool;
+
+    /// Length of the tag produced by `sign()` in bytes.
+    fn tag_len(&self) -> usize;
+}
 
 // ---------------------------------------------------------------------------
 // Config
@@ -44,7 +86,9 @@ pub struct Config {
 // ---------------------------------------------------------------------------
 
 /// Category of E2E check failure.
-//fusa:req REQ-SAFETY-004, REQ-SAFETY-005, REQ-SAFETY-006
+//fusa:req REQ-SAFETY-004
+//fusa:req REQ-SAFETY-005
+//fusa:req REQ-SAFETY-006
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum E2EErrorKind {
     /// The computed CRC does not match the header CRC.
@@ -70,7 +114,9 @@ impl std::fmt::Display for E2EErrorKind {
 // ---------------------------------------------------------------------------
 
 /// An E2E safety check failure.
-//fusa:req REQ-SAFETY-004, REQ-SAFETY-005, REQ-SAFETY-006
+//fusa:req REQ-SAFETY-004
+//fusa:req REQ-SAFETY-005
+//fusa:req REQ-SAFETY-006
 #[derive(Debug)]
 pub struct E2EError {
     pub kind: E2EErrorKind,
@@ -95,7 +141,9 @@ impl std::error::Error for E2EError {}
 // ---------------------------------------------------------------------------
 
 /// Prepends an E2E header to payloads before transmission.
-//fusa:req REQ-SAFETY-001, REQ-SAFETY-002, REQ-SAFETY-003
+//fusa:req REQ-SAFETY-001
+//fusa:req REQ-SAFETY-002
+//fusa:req REQ-SAFETY-003
 pub struct Protector {
     cfg: Config,
     seq: AtomicU32,
@@ -113,7 +161,9 @@ impl Protector {
     /// Prepend the E2E header and return the protected payload.
     ///
     /// The sequence counter increments monotonically on each call.
-    //fusa:req REQ-SAFETY-001, REQ-SAFETY-002, REQ-SAFETY-003
+    //fusa:req REQ-SAFETY-001
+    //fusa:req REQ-SAFETY-002
+    //fusa:req REQ-SAFETY-003
     pub fn protect(&self, payload: &[u8]) -> Vec<u8> {
         let seq = self.seq.fetch_add(1, Ordering::SeqCst);
         let header = build_header(self.cfg.data_id, self.cfg.source_id, seq, payload);
@@ -130,7 +180,9 @@ impl Protector {
 // ---------------------------------------------------------------------------
 
 /// Validates E2E headers and strips them from received data.
-//fusa:req REQ-SAFETY-004, REQ-SAFETY-005, REQ-SAFETY-006
+//fusa:req REQ-SAFETY-004
+//fusa:req REQ-SAFETY-005
+//fusa:req REQ-SAFETY-006
 pub struct Receiver {
     cfg: Config,
     state: Mutex<ReceiverState>,
@@ -160,7 +212,11 @@ impl Receiver {
     /// - `E2EErrorKind::HeaderTooShort` — data shorter than 10 bytes.
     /// - `E2EErrorKind::CrcMismatch` — CRC in the header does not match.
     /// - `E2EErrorKind::SequenceGap` — sequence counter is not consecutive.
-    //fusa:req REQ-SAFETY-004, REQ-SAFETY-005, REQ-SAFETY-006
+    //fusa:req REQ-SAFETY-004
+    //fusa:req REQ-SAFETY-005
+    //fusa:req REQ-SAFETY-006
+    //fusa:req REQ-SEC-002
+    //fusa:req REQ-SEC-003
     pub fn unwrap(&self, data: &[u8]) -> Result<Vec<u8>, E2EError> {
         //fusa:req REQ-SAFETY-006
         if data.len() < HEADER_SIZE {
@@ -175,7 +231,7 @@ impl Receiver {
         let received_crc = u16::from_le_bytes([data[8], data[9]]);
         let payload = &data[HEADER_SIZE..];
 
-        //fusa:req REQ-SAFETY-004: verify CRC.
+        //fusa:req REQ-SAFETY-004
         let expected_header = build_header(self.cfg.data_id, self.cfg.source_id, seq, payload);
         let expected_crc = u16::from_le_bytes([expected_header[8], expected_header[9]]);
         if received_crc != expected_crc {
@@ -189,7 +245,7 @@ impl Receiver {
             });
         }
 
-        //fusa:req REQ-SAFETY-005: check sequence counter.
+        //fusa:req REQ-SAFETY-005
         let mut state = self.state.lock().unwrap();
         if !state.first && seq != state.last_seq.wrapping_add(1) {
             let expected = state.last_seq.wrapping_add(1);
@@ -216,6 +272,9 @@ impl Receiver {
 ///
 /// The CRC slot (bytes 8–9) is treated as zero when computing the CRC,
 /// then the computed CRC is written into the slot.
+//fusa:req REQ-SAFETY-001
+//fusa:req REQ-SAFETY-002
+//fusa:req REQ-SAFETY-003
 fn build_header(data_id: u16, source_id: u16, seq: u32, payload: &[u8]) -> [u8; HEADER_SIZE] {
     let mut hdr = [0u8; HEADER_SIZE];
     hdr[0..2].copy_from_slice(&data_id.to_le_bytes());
@@ -274,7 +333,9 @@ mod tests {
         assert_eq!(&protected[HEADER_SIZE..], payload);
     }
 
-    //fusa:test REQ-SAFETY-002, REQ-SAFETY-003, REQ-SAFETY-004
+    //fusa:test REQ-SAFETY-002
+    //fusa:test REQ-SAFETY-003
+    //fusa:test REQ-SAFETY-004
     #[test]
     fn protect_and_unwrap() {
         let (p, r) = make_pair();

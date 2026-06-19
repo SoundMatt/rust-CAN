@@ -38,11 +38,14 @@ Full HARA: see `.fusa-hara.json`.
 
 ## 3. Requirements
 
-High-level safety requirements are maintained in `.fusa-reqs.json` in rsfusa format (36 requirements, REQ-CAN-001 through REQ-DBC-002). Every requirement is:
+High-level safety requirements are maintained in `.fusa-reqs.json` in rsfusa format (43 requirements: REQ-CAN-001..REQ-DBC-002 plus REQ-SEC-001..REQ-SEC-005). Every requirement is:
 
-- Tagged with `"standard": "iso26262"` and `"level": "HLR"`
-- Annotated in source with `//fusa:req REQ-XXX-NNN`
-- Traced to at least one test with `//fusa:req` above `#[test]`
+- Tagged with `"standard": "iso26262"`, `"asil"`, and `"verificationMethod"`
+- Annotated in source with `//fusa:req REQ-XXX-NNN` (one requirement per line)
+- Traced to at least one test with `//fusa:test REQ-XXX-NNN` above `#[test]`
+- Security requirements additionally annotated with `//fusa:sec-test REQ-SEC-NNN`
+
+See `ARCHITECTURE.md` for ASIL allocation and module decomposition.
 
 ---
 
@@ -85,11 +88,15 @@ Every PR must pass:
 
 ## 5. Tool Qualification
 
-rust-FuSa (rsfusa) is used as a safety analysis and verification tool. Tool qualification evidence is produced by `rsfusa qualify` on each release and archived in the audit pack.
+| Tool | Version | TQL | Qualification Method |
+|------|---------|-----|----------------------|
+| rsfusa | 0.2.8 | TQL-2 | `rsfusa qualify` output archived per release; tool output validated against manual inspection |
+| rustc / cargo | pinned in `rust-toolchain.toml` | TQL-3 | Version pinned in `Cargo.lock`; verified against Rust compiler test suite results |
 
-The Rust compiler and cargo are qualified via:
-- Version pinning in `Cargo.lock` and `rust-toolchain.toml`
-- Verified against known compiler test suite results
+- **TQL-2** (ISO 26262-8 §11): Tool error detection sufficient; tool output used as evidence but does not replace mandatory testing.
+- **TQL-3** (ISO 26262-8 §11): Tool may increase risk; additional validation required (satisfied by `cargo test` as independent gate).
+
+**ASIL Decomposition:** rust-CAN implements ASIL-B(D) = ASIL-A(D) + ASIL-A(D) at the architectural boundary between the `safety` module (CRC + sequence counter, ASIL-B) and the `isotp` module (timeout, ASIL-A). See `ARCHITECTURE.md §3`.
 
 ---
 
@@ -108,7 +115,52 @@ Maintained automatically by `rsfusa trace`. Run on every CI push. Output: `trace
 
 ---
 
-## 8. Known Limitations
+## 8. Cybersecurity
+
+### 8.1 Standard
+
+rust-CAN cybersecurity engineering follows **ISO/SAE 21434:2021** (Road vehicles — Cybersecurity engineering). The full Threat Analysis and Risk Assessment is maintained in `tara.json`.
+
+### 8.2 Cybersecurity Goals
+
+| ID          | Description                                                                    | CAL    |
+|-------------|--------------------------------------------------------------------------------|--------|
+| CSG-CAN-01  | Reject frames with invalid IDs/DLC before any subscriber receives them         | CAL-3  |
+| CSG-CAN-02  | Detect tampered, replayed, and spoofed protected messages                      | CAL-3  |
+| CSG-CAN-03  | Resist resource-exhaustion and flooding attacks                                | CAL-3  |
+
+### 8.3 CRC-16 scope — safety vs. security
+
+The `Protector`/`Receiver` E2E layer uses CRC-16/CCITT-FALSE as its integrity mechanism. **This is a safety control only.**
+
+| Property | CRC-16 | HMAC-SHA256 |
+|----------|--------|-------------|
+| Detects random bit errors | Yes (HD ≥ 4) | Yes |
+| Detects adversarial forgery | **No** — no keying material | Yes |
+| Detects replay | Via sequence counter only | Yes (with nonce) |
+| Standard | ISO 26262 E2E | IEC 62443 SL-2 / ISO/SAE 21434 CAL-3 |
+
+Applications operating in environments requiring security-level integrity (IEC 62443 SL-2+, ISO/SAE 21434 CAL-3) **must** implement the `MessageAuthenticator` trait (REQ-SEC-006) using HMAC-SHA256 or AES-CMAC with per-node key management.
+
+### 8.4 Threat summary
+
+| Threat   | Description                           | CAL    | Mitigations           | Residual risk |
+|----------|---------------------------------------|--------|-----------------------|---------------|
+| T-CAN-01 | Frame injection (invalid ID/DLC)      | CAL-3  | REQ-SEC-001           | Low           |
+| T-CAN-02 | Payload tampering (active MitM)       | CAL-3  | REQ-SEC-002+006       | Low (with MAC)|
+| T-CAN-03 | Replay attack                         | CAL-3  | REQ-SEC-003           | Low           |
+| T-CAN-04 | Bus-off DoS (dominant-bit flooding)   | CAL-3  | REQ-SEC-008           | Medium        |
+| T-CAN-05 | Node impersonation (CAN ID spoofing)  | CAL-3  | REQ-SEC-006           | Medium        |
+| T-CAN-06 | Eavesdropping (passive capture)       | CAL-2  | **Risk accepted**     | Accepted      |
+| T-CAN-07 | Frame-flooding DoS                    | CAL-3  | REQ-SEC-007           | Low           |
+| T-CAN-08 | ISO-TP session exhaustion             | CAL-2  | REQ-SEC-004           | Low           |
+| T-CAN-09 | DBC parser crash (malformed input)    | CAL-2  | REQ-SEC-005           | Low           |
+
+### 8.5 Risk acceptance — T-CAN-06 (Eavesdropping)
+
+CAN is a broadcast medium with no physical-layer confidentiality. Encryption on CAN is non-standard and introduces unacceptable latency for safety-critical signals. Confidentiality is a system-level concern (UDS security access, OEM encryption layer). rust-CAN does not add encryption. **Formally risk-accepted** — see `tara.json` T-CAN-06.
+
+## 9. Known Limitations
 
 1. SocketCAN support is Linux-only (`cfg(target_os = "linux")`). macOS/Windows use VirtualBus only.
 2. CAN XL hardware support depends on kernel ≥ 6.0 with XL-capable drivers.
@@ -116,7 +168,7 @@ Maintained automatically by `rsfusa trace`. Run on every CI push. Output: `trace
 
 ---
 
-## 9. Sign-off
+## 10. Sign-off
 
 | Role                  | Name         | Date       |
 |-----------------------|--------------|------------|

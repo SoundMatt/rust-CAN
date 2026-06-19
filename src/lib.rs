@@ -59,6 +59,9 @@ pub use frame::{
     CAN_MAX_DATA_LEN, CAN_MAX_EXT_ID, CAN_MAX_STD_ID, CAN_XL_MAX_DATA_LEN, CAN_XL_MAX_PRIO_ID,
     CAN_XL_MIN_DATA_LEN,
 };
+#[cfg(feature = "hmac-auth")]
+pub use safety::HmacSha256Auth;
+pub use safety::MessageAuthenticator;
 
 /// The RELAY spec version this implementation targets.
 pub const SPEC_VERSION: &str = "1.1";

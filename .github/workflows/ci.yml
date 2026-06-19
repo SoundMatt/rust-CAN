@@ -42,6 +42,11 @@ jobs:
       - name: test
         run: cargo test --locked
 
+      - name: Dependency vulnerability audit (§20.1.2)
+        run: |
+          cargo install cargo-audit --locked
+          cargo audit
+
       - name: build release binary
         run: cargo build --release --bin rust-can --locked
 
@@ -52,7 +57,7 @@ jobs:
           d = json.load(sys.stdin)
           assert d['tool'] == 'rust-can', f'bad tool: {d}'
           assert d['protocol'] == 'CAN', f'bad protocol: {d}'
-          assert d['spec_version'] == '1.1', f'bad spec_version: {d}'
+          assert d['spec_version'] == '1.10', f'bad spec_version: {d}'
           print('version JSON OK')
           "
           ./target/release/rust-can capabilities | python3 -c "
@@ -125,8 +130,8 @@ jobs:
       - name: Static analysis
         run: rsfusa analyze --dir . --format json --output analyze-report.json || true
 
-      - name: Safety check (ASIL-B strict — evidence collection)
-        run: rsfusa check --dir . --strict --format json --output check-report.json || true
+      - name: Safety check (ASIL-B strict — §20.1.2 gate on ERROR)
+        run: rsfusa check --dir . --strict --format json --output check-report.json
 
       - name: Safety check SARIF (GitHub code scanning)
         run: rsfusa check --dir . --format sarif --output results.sarif || true
@@ -134,10 +139,10 @@ jobs:
       - name: Cyclomatic complexity V(G)
         run: rsfusa comp --dir . --format json --output comp-report.json || true
 
-      - name: Requirement traceability matrix
+      - name: 100% requirement traceability (§20.1.2 gate)
         run: |
-          rsfusa trace --dir . --format json --output trace.json || true
-          rsfusa trace --dir . --format text || true
+          rsfusa trace --dir . --format json --output trace.json
+          rsfusa trace --dir . --format text
 
       - name: FMEA
         run: rsfusa fmea --dir . || true
@@ -226,13 +231,13 @@ jobs:
         run: cargo build --release --bin rust-can --locked
 
       - name: Install relay
-        run: go install github.com/SoundMatt/RELAY/cmd/relay@v1.7.0
+        run: go install github.com/SoundMatt/RELAY/cmd/relay@v1.10.0
 
       - name: RELAY conformance (strict)
         run: relay conform ./target/release/rust-can --strict
 
-      - name: RELAY interop (golden vectors)
-        run: relay interop ./target/release/rust-can || true
+      - name: RELAY interop (golden vectors — must be EQUIVALENT)
+        run: relay interop ./target/release/rust-can
 
   # ── DCO sign-off check ─────────────────────────────────────────────────────
   dco:

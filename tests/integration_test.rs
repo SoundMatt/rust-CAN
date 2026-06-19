@@ -460,8 +460,21 @@ async fn isotp_single_frame_roundtrip() {
 //fusa:test REQ-CAN-001
 #[test]
 fn spec_version_constant() {
-    assert_eq!(rust_can::SPEC_VERSION, "1.1");
-    assert_eq!(rust_can::RELAY_SPEC_VERSION, "1.1");
+    assert_eq!(rust_can::SPEC_VERSION, "1.10");
+    assert_eq!(rust_can::RELAY_SPEC_VERSION, "1.10");
+}
+
+// ---------------------------------------------------------------------------
+// §13.7.2 standard module name (r#virtual alias for virtual_bus)
+// ---------------------------------------------------------------------------
+
+//fusa:test REQ-CAN-001
+#[tokio::test]
+async fn virtual_module_alias_is_accessible() {
+    use rust_can::r#virtual::VirtualBus;
+    use std::sync::Arc;
+    let bus = Arc::new(VirtualBus::new());
+    bus.close().await.unwrap();
 }
 
 // ---------------------------------------------------------------------------

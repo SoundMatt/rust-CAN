@@ -234,7 +234,7 @@ fn cmd_capabilities() -> Result<i32, Box<dyn std::error::Error>> {
         "spec_version":        rust_can::SPEC_VERSION,
         "commands":            ["version", "capabilities", "status", "send", "subscribe", "convert"],
         "transports":          transports,
-        "features":            ["fd", "xl", "isotp", "j1939", "safety", "dbc"],
+        "features":            ["fd", "xl", "isotp", "j1939", "safety", "dbc", "recorder", "obdii", "uds"],
         "interfaces":          ["Bus"],
         "optional_interfaces": ["LoaningBus", "HealthProvider", "MetricsProvider", "Drainer"],
         "adapt":               true,

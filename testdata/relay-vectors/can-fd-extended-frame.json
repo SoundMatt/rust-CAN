@@ -1,0 +1,29 @@
+{
+    "name": "can-fd-extended-frame",
+    "description": "CAN-FD frame, 29-bit extended ID, BRS set, 16 data bytes",
+    "type": "can.Frame",
+    "value": {
+        "id": 28036591,
+        "ext": true,
+        "fd": true,
+        "brs": true,
+        "data": "AAAAAAAAAAAAAAAAAAAAAA=="
+    },
+    "message": {
+        "protocol": 1,
+        "version": {
+            "major": 0,
+            "minor": 0,
+            "patch": 0
+        },
+        "id": "28036591",
+        "payload": "AAAAAAAAAAAAAAAAAAAAAA==",
+        "timestamp": "0001-01-01T00:00:00Z",
+        "meta": {
+            "can.brs": "true",
+            "can.ext": "true",
+            "can.fd": "true",
+            "can.rtr": "false"
+        }
+    }
+}

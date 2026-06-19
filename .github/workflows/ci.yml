@@ -68,12 +68,13 @@ jobs:
           assert d['protocol'] == 'CAN', f'bad protocol: {d}'
           print('status JSON OK')
           "
-          echo '{"id":291,"fd":true,"brs":true,"data":[222,173,190,239]}' \
+          echo '{"id":291,"fd":true,"brs":true,"data":"3q2+7w=="}' \
             | ./target/release/rust-can convert --protocol CAN | python3 -c "
-          import json, sys
+          import json, sys, base64
           d = json.load(sys.stdin)
           assert d['id'] == '291', f'bad id: {d}'
           assert d['protocol'] == 1, f'bad protocol: {d}'
+          assert base64.b64decode(d['payload']) == bytes([0xDE,0xAD,0xBE,0xEF]), f'bad payload: {d}'
           print('convert JSON OK')
           "
           convert_ec=0
@@ -222,10 +223,13 @@ jobs:
         run: cargo build --release --bin rust-can --locked
 
       - name: Install relay
-        run: go install github.com/SoundMatt/RELAY/cmd/relay@v1.6.0
+        run: go install github.com/SoundMatt/RELAY/cmd/relay@v1.7.0
 
       - name: RELAY conformance (strict)
         run: relay conform ./target/release/rust-can --strict
+
+      - name: RELAY interop (golden vectors)
+        run: relay interop ./target/release/rust-can || true
 
   # ── DCO sign-off check ─────────────────────────────────────────────────────
   dco:

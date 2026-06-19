@@ -108,7 +108,8 @@ pub struct Frame {
     #[serde(default, skip_serializing_if = "is_false")]
     pub sec: bool,
 
-    /// Frame payload.
+    /// Frame payload — base64-encoded in JSON (RELAY spec §15.1).
+    #[serde(with = "crate::base64_serde")]
     pub data: Vec<u8>,
 }
 

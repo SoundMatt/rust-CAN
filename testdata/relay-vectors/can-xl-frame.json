@@ -1,0 +1,38 @@
+{
+    "name": "can-xl-frame",
+    "description": "CAN XL frame, 11-bit priority ID, SDT/VCID/AF set, SEC and ESI flags, 4 data bytes",
+    "type": "can.Frame",
+    "value": {
+        "id": 291,
+        "esi": true,
+        "xl": true,
+        "sdt": 5,
+        "vcid": 2,
+        "af": 51966,
+        "sec": true,
+        "data": "3q2+7w=="
+    },
+    "message": {
+        "protocol": 1,
+        "version": {
+            "major": 0,
+            "minor": 0,
+            "patch": 0
+        },
+        "id": "291",
+        "payload": "3q2+7w==",
+        "timestamp": "0001-01-01T00:00:00Z",
+        "meta": {
+            "can.brs": "false",
+            "can.ext": "false",
+            "can.fd": "false",
+            "can.rtr": "false",
+            "can.esi": "true",
+            "can.xl": "true",
+            "can.sdt": "5",
+            "can.vcid": "2",
+            "can.af": "51966",
+            "can.sec": "true"
+        }
+    }
+}

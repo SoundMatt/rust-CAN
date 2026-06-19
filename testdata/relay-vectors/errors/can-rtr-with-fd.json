@@ -1,0 +1,13 @@
+{
+    "name": "can-rtr-with-fd",
+    "description": "RTR must be false on CAN-FD frames; setting both is a structural violation",
+    "type": "can.Frame",
+    "kind": "error",
+    "value": {
+        "id": 256,
+        "fd": true,
+        "rtr": true,
+        "data": "AA=="
+    },
+    "error": "ErrInvalidFrame"
+}

@@ -36,6 +36,7 @@
 //! ```
 
 pub mod adapt;
+pub(crate) mod base64_serde;
 pub mod bus;
 pub(crate) mod crc;
 pub mod dbc;

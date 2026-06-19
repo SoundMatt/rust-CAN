@@ -6,8 +6,8 @@
   "summary": {
     "failed": 0,
     "ignored": 0,
-    "passed": 113,
-    "total": 113
+    "passed": 116,
+    "total": 116
   },
   "testRun": {
     "command": "cargo test",

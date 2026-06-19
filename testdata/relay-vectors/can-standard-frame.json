@@ -1,0 +1,26 @@
+{
+    "name": "can-standard-frame",
+    "description": "Classic CAN frame, 11-bit ID, 4 data bytes",
+    "type": "can.Frame",
+    "value": {
+        "id": 291,
+        "data": "3q2+7w=="
+    },
+    "message": {
+        "protocol": 1,
+        "version": {
+            "major": 0,
+            "minor": 0,
+            "patch": 0
+        },
+        "id": "291",
+        "payload": "3q2+7w==",
+        "timestamp": "0001-01-01T00:00:00Z",
+        "meta": {
+            "can.brs": "false",
+            "can.ext": "false",
+            "can.fd": "false",
+            "can.rtr": "false"
+        }
+    }
+}

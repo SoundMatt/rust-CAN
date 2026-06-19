@@ -99,7 +99,8 @@ pub struct Message {
     pub protocol: Protocol,
     pub version: Version,
     pub id: String,
-    /// Base64-encoded in JSON.
+    /// Base64-encoded in JSON (RELAY spec §15.1).
+    #[serde(with = "crate::base64_serde")]
     pub payload: Vec<u8>,
     /// RFC 3339 nanosecond timestamp.
     pub timestamp: DateTime<Utc>,

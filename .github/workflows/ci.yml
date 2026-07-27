@@ -90,8 +90,11 @@ jobs:
           ./target/release/rust-can convert --protocol LIN </dev/null || lin_ec=$?
           test "$lin_ec" -eq 2 && echo 'convert exit-2 on bad protocol OK' || \
             { echo "FAIL: expected exit 2 on bad protocol, got $lin_ec"; exit 1; }
+          # No --iface: send --format json MUST work with no protocol flags
+          # at all (§11.2's streaming-JSON-sink contract), defaulting to the
+          # virtual bus.
           printf '{"protocol":1,"version":{"major":0,"minor":0,"patch":0},"id":"291","payload":"3q2+7w==","timestamp":"1970-01-01T00:00:00Z","meta":{"can.fd":"true","can.brs":"true","can.ext":"false","can.rtr":"false","can.xl":"false"}}\n' \
-            | ./target/release/rust-can send --iface vcan0 --format json
+            | ./target/release/rust-can send --format json
           echo 'send --format json OK'
 
   # ── ASIL-B safety checks via rust-FuSa ────────────────────────────────────
@@ -130,28 +133,42 @@ jobs:
       - name: Static analysis
         run: rsfusa analyze --dir . --format json --output analyze-report.json || true
 
-      - name: Safety check (ASIL-B strict — §20.1.2)
-        run: rsfusa check --dir . --strict --format json --output check-report.json || true
+      - name: Safety check (§20.1.2 — gates on ERROR findings)
+        # Gating: §20.1 item 2 requires the standard check to fail the job
+        # on any ERROR-severity finding. Deliberately not --strict: rsfusa's
+        # --strict mode also fails on WARNING-severity findings (function
+        # length / nesting-depth style lint), which is a larger, separate
+        # code-quality remediation than an ERROR-severity safety gate; the
+        # spec text §20.1 item 2 asks specifically for "gating on ERROR
+        # findings". The --strict report is still produced below (SARIF)
+        # for visibility without blocking the build on warnings.
+        run: rsfusa check --dir . --format json --output check-report.json
 
-      - name: Safety check SARIF (GitHub code scanning)
-        run: rsfusa check --dir . --format sarif --output results.sarif || true
+      - name: Safety check SARIF, strict (GitHub code scanning)
+        run: rsfusa check --dir . --strict --format sarif --output results.sarif || true
 
       - name: Cyclomatic complexity V(G)
         run: rsfusa comp --dir . --format json --output comp-report.json || true
 
       - name: Requirement traceability matrix (§20.1.2)
+        # Gating: §20.1 item 2 requires 100% requirement traceability (every
+        # requirement traced and tested) to fail the job otherwise.
         run: |
-          rsfusa trace --dir . --format json --output trace.json || true
-          rsfusa trace --dir . --format text || true
+          rsfusa trace --dir . --format json --output trace.json
+          rsfusa trace --dir . --format text
 
       - name: FMEA
         run: rsfusa fmea --dir . || true
 
       - name: Threat analysis (TARA)
-        run: rsfusa tara --dir . || true
+        # Gating: §20.1 item 2 requires safety-lifecycle findings such as
+        # TARA gaps to fail the job.
+        run: rsfusa tara --dir .
 
       - name: Cybersecurity analysis (CWE)
-        run: rsfusa cyber --dir . --format json --output cyber-report.json || true
+        # Gating: §20.1 item 2 requires the cybersecurity analysis to fail
+        # the job on any finding.
+        run: rsfusa cyber --dir . --format json --output cyber-report.json
 
       - name: Boundary diagram
         run: rsfusa boundary --dir . || true

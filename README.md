@@ -7,7 +7,7 @@ The `Bus` trait is stable. Implementations are swappable without changing applic
 
 [![CI](https://github.com/SoundMatt/rust-CAN/actions/workflows/ci.yml/badge.svg)](https://github.com/SoundMatt/rust-CAN/actions/workflows/ci.yml)
 
-**RELAY spec:** v1.1 · **Safety:** ASIL-B (ISO 26262) · **Language:** Rust 2021
+**RELAY spec:** v1.10 · **Safety:** ASIL-B (ISO 26262) · **Language:** Rust 2021
 
 ---
 
@@ -23,7 +23,7 @@ The `Bus` trait is stable. Implementations are swappable without changing applic
 | `isotp` | ISO 15765-2 (ISO-TP) multi-frame transport | All |
 | `j1939` | SAE J1939 — 29-bit extended ID, PGN addressing | All |
 | `safety` | E2E protection — DataID, SourceID, SequenceCounter, CRC-16 | All |
-| `adapt` | RELAY v1.1 adapter — `Adapt()`, `ToMessage()`, `FromMessage()` | All |
+| `adapt` | RELAY v1.10 adapter — `Adapt()`, `ToMessage()`, `FromMessage()` | All |
 
 ---
 
@@ -213,7 +213,9 @@ rust-CAN targets **ASIL-B** under ISO 26262 Part 6.
 | Tool qualification | `rsfusa qualify` | `qualify-report.json` |
 | SBOM | `rsfusa release` | `sbom.json` |
 
-CI enforces `rsfusa check --strict` — any ERROR finding fails the build.
+CI enforces `rsfusa check`, `rsfusa trace`, `rsfusa tara`, and `rsfusa cyber` — any
+ERROR-severity finding, untraced requirement, or cybersecurity gap fails the build
+(RELAY spec §20.1.2).
 
 ---
 

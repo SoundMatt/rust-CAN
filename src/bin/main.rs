@@ -15,6 +15,11 @@ use rust_can::relay::{Context, Message, Protocol, SubscriberOptions};
 use rust_can::virtual_bus::VirtualBus;
 use rust_can::{Bus, Frame};
 
+/// Reserved `--iface` value selecting the in-process virtual bus (the
+/// zero-configuration default so `send`/`subscribe --format json` work with
+/// no protocol flags, per RELAY spec §11.2).
+const VIRTUAL_IFACE: &str = "virtual";
+
 // ---------------------------------------------------------------------------
 // CLI argument definitions
 // ---------------------------------------------------------------------------
@@ -55,8 +60,9 @@ enum Commands {
     /// (crossbar destination mode, RELAY v1.8 §send). In that mode --id and
     /// --data are ignored.
     Send {
-        /// Network interface name (informational — uses virtual bus).
-        #[arg(long)]
+        /// Network interface: a real SocketCAN interface name (Linux, e.g.
+        /// `can0`/`vcan0`) or `virtual` (default) for the in-process bus.
+        #[arg(long, default_value = VIRTUAL_IFACE)]
         iface: String,
         /// CAN frame ID (decimal or hex with 0x prefix). Optional when --format json.
         #[arg(long)]
@@ -93,8 +99,9 @@ enum Commands {
 
     /// Subscribe to CAN frames on the virtual bus.
     Subscribe {
-        /// Network interface name (informational — uses virtual bus).
-        #[arg(long)]
+        /// Network interface: a real SocketCAN interface name (Linux, e.g.
+        /// `can0`/`vcan0`) or `virtual` (default) for the in-process bus.
+        #[arg(long, default_value = VIRTUAL_IFACE)]
         iface: String,
         /// Stop after receiving N frames (0 = unlimited).
         #[arg(long, default_value = "0")]
@@ -275,6 +282,37 @@ fn cmd_status(format: OutputFormat) -> Result<i32, Box<dyn std::error::Error>> {
 }
 
 // ---------------------------------------------------------------------------
+// bus selection
+// ---------------------------------------------------------------------------
+
+/// Open the `Bus` selected by `--iface`.
+///
+/// `"virtual"` (the default) opens the in-process `VirtualBus`; any other
+/// value is treated as a real SocketCAN interface name and opened via
+/// `SocketCanBus` (Linux only). This is what makes the `transports` entry in
+/// `capabilities` genuine rather than aspirational.
+fn open_bus(iface: &str) -> Result<Arc<dyn Bus>, Box<dyn std::error::Error>> {
+    if iface.eq_ignore_ascii_case(VIRTUAL_IFACE) {
+        return Ok(Arc::new(VirtualBus::new()));
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        Ok(Arc::new(rust_can::socketcan::SocketCanBus::new(iface)?))
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    {
+        Err(format!(
+            "rust-can: SocketCAN is only available on Linux; cannot open interface '{}' \
+             on this platform (use --iface {} for the in-process bus)",
+            iface, VIRTUAL_IFACE
+        )
+        .into())
+    }
+}
+
+// ---------------------------------------------------------------------------
 // send
 // ---------------------------------------------------------------------------
 
@@ -288,7 +326,7 @@ fn cmd_status(format: OutputFormat) -> Result<i32, Box<dyn std::error::Error>> {
 /// via from_message(), and sends the resulting frame to the virtual bus.
 #[allow(clippy::too_many_arguments)]
 async fn cmd_send(
-    _iface: String,
+    iface: String,
     id_str: Option<String>,
     data_hex: Option<String>,
     fd: bool,
@@ -300,7 +338,7 @@ async fn cmd_send(
     sec: bool,
     format: OutputFormat,
 ) -> Result<i32, Box<dyn std::error::Error>> {
-    let bus = Arc::new(VirtualBus::new());
+    let bus = open_bus(&iface)?;
 
     match format {
         OutputFormat::Json => {
@@ -352,7 +390,7 @@ async fn cmd_send(
 
 //fusa:req REQ-SEND-001
 /// Read NDJSON relay.Message objects from stdin and send each as a CAN frame.
-async fn cmd_send_json(bus: Arc<VirtualBus>) -> Result<i32, Box<dyn std::error::Error>> {
+async fn cmd_send_json(bus: Arc<dyn Bus>) -> Result<i32, Box<dyn std::error::Error>> {
     let stdin = std::io::stdin();
     let mut sent = 0usize;
     let mut errors = 0usize;
@@ -406,15 +444,16 @@ async fn cmd_send_json(bus: Arc<VirtualBus>) -> Result<i32, Box<dyn std::error::
 //fusa:req REQ-CAN-003
 /// `rust-can subscribe --iface <name> [--count N] [--format text|json]`
 async fn cmd_subscribe(
-    _iface: String,
+    iface: String,
     count: usize,
     format: OutputFormat,
 ) -> Result<i32, Box<dyn std::error::Error>> {
-    let bus = Arc::new(VirtualBus::new());
+    let bus = open_bus(&iface)?;
     let rx = bus.subscribe(vec![], SubscriberOptions::default()).await?;
 
     eprintln!(
-        "rust-can: subscribing on virtual bus ({})",
+        "rust-can: subscribing on {} ({})",
+        iface,
         if count == 0 {
             "unlimited".to_string()
         } else {
@@ -432,21 +471,16 @@ async fn cmd_subscribe(
             None => break,
             Some(frame) => {
                 received += 1;
-                let msg = rust_can::to_message(&frame);
+                let mut msg = rust_can::to_message(&frame);
+                msg.seq = received as u64;
 
                 match format {
                     OutputFormat::Json => {
-                        let doc = json!({
-                            "protocol": "CAN",
-                            "id":       msg.id,
-                            "data":     hex::encode(&frame.data),
-                            "ext":      frame.ext,
-                            "fd":       frame.fd,
-                            "xl":       frame.xl,
-                            "rtr":      frame.rtr,
-                            "seq":      received,
-                        });
-                        println!("{}", serde_json::to_string(&doc)?);
+                        // Emit the canonical relay.Message (§4, §15.7.1) —
+                        // this is what `relay trace`/`relay crossbar` parse
+                        // as NDJSON, and the exact dual of `send --format
+                        // json`'s stdin schema (§11.2).
+                        println!("{}", serde_json::to_string(&msg)?);
                     }
                     OutputFormat::Text => {
                         println!(

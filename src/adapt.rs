@@ -120,6 +120,105 @@ pub fn adapt(bus: Arc<dyn Bus>) -> Box<dyn crate::relay::Node> {
 }
 
 // ---------------------------------------------------------------------------
+// AdaptQueue — policy-aware buffer for the Adapt()-level relay.Message
+// channel, per RELAY spec §10.5 rule 3.
+// ---------------------------------------------------------------------------
+
+/// A bounded `Message` queue implementing `DropNewest`/`DropOldest`/`Block`
+/// back-pressure, mirroring `bus::SubInner`'s (Frame-level) policy logic but
+/// at the `relay.Message` layer that §10.5 rule 3 actually governs.
+struct AdaptQueue {
+    queue: std::sync::Mutex<std::collections::VecDeque<Message>>,
+    capacity: usize,
+    policy: BackPressurePolicy,
+    /// Notified when an item is pushed (wakes a waiting `pop`).
+    notify_push: tokio::sync::Notify,
+    /// Notified when an item is popped (wakes a `Block`-policy `push`
+    /// waiting for room).
+    notify_pop: tokio::sync::Notify,
+    closed: std::sync::atomic::AtomicBool,
+}
+
+impl AdaptQueue {
+    fn new(capacity: usize, policy: BackPressurePolicy) -> Self {
+        Self {
+            queue: std::sync::Mutex::new(std::collections::VecDeque::with_capacity(
+                capacity.min(256),
+            )),
+            capacity: capacity.max(1),
+            policy,
+            notify_push: tokio::sync::Notify::new(),
+            notify_pop: tokio::sync::Notify::new(),
+            closed: std::sync::atomic::AtomicBool::new(false),
+        }
+    }
+
+    /// Push `msg` per the configured policy.
+    ///
+    /// `DropNewest` discards `msg` when full; `DropOldest` evicts the
+    /// front of the queue to make room; `Block` waits (async) until there
+    /// is room rather than dropping either message.
+    async fn push(&self, msg: Message) {
+        match self.policy {
+            BackPressurePolicy::DropNewest => {
+                let mut q = self.queue.lock().unwrap();
+                if q.len() < self.capacity {
+                    q.push_back(msg);
+                    drop(q);
+                    self.notify_push.notify_one();
+                }
+            }
+            BackPressurePolicy::DropOldest => {
+                let mut q = self.queue.lock().unwrap();
+                if q.len() >= self.capacity {
+                    q.pop_front();
+                }
+                q.push_back(msg);
+                drop(q);
+                self.notify_push.notify_one();
+            }
+            BackPressurePolicy::Block => loop {
+                {
+                    let mut q = self.queue.lock().unwrap();
+                    if q.len() < self.capacity {
+                        q.push_back(msg);
+                        drop(q);
+                        self.notify_push.notify_one();
+                        return;
+                    }
+                }
+                self.notify_pop.notified().await;
+            },
+        }
+    }
+
+    /// Pop the next message, waiting until one is available. Returns `None`
+    /// once `close()` has been called and the queue is drained.
+    async fn pop(&self) -> Option<Message> {
+        loop {
+            {
+                let mut q = self.queue.lock().unwrap();
+                if let Some(m) = q.pop_front() {
+                    drop(q);
+                    self.notify_pop.notify_one();
+                    return Some(m);
+                }
+            }
+            if self.closed.load(std::sync::atomic::Ordering::SeqCst) {
+                // One final check in case a push raced with the close.
+                return self.queue.lock().unwrap().pop_front();
+            }
+            self.notify_push.notified().await;
+        }
+    }
+
+    fn close(&self) {
+        self.closed.store(true, std::sync::atomic::Ordering::SeqCst);
+        self.notify_push.notify_waiters();
+    }
+}
+
+// ---------------------------------------------------------------------------
 // CanAdapter
 // ---------------------------------------------------------------------------
 
@@ -135,7 +234,15 @@ impl crate::relay::Node for CanAdapter {
 
     /// Send a relay::Message by converting it to a CAN frame.
     async fn send(&self, ctx: Context, msg: Message) -> Result<(), crate::relay::Error> {
-        let frame = from_message(&msg).map_err(|_| crate::relay::Error::PayloadTooLarge)?;
+        // A malformed msg.id is a structural conversion failure (closer to
+        // ErrInvalidFrame territory, §5.3), not a payload-size problem.
+        // relay::Node::send() is restricted to the four mandatory sentinels
+        // (§10.1), so there is no exact fit; NotConnected is used here as
+        // the deliberate "no usable frame could be constructed" fallback,
+        // matching the safe-default mapping used below for other
+        // unmodelled bus errors — PayloadTooLarge would be actively
+        // misleading to a caller matching on it to detect oversized frames.
+        let frame = from_message(&msg).map_err(|_| crate::relay::Error::NotConnected)?;
         self.bus.send(ctx, frame).await.map_err(|e| match e {
             Error::Closed => crate::relay::Error::Closed,
             Error::NotConnected => crate::relay::Error::NotConnected,
@@ -149,6 +256,13 @@ impl crate::relay::Node for CanAdapter {
     ///
     /// Follows the goroutine model from RELAY spec §10.5: one task per
     /// subscription, back-pressure applied per the SubscriberOptions policy.
+    ///
+    /// `tokio::sync::mpsc` has no drain-oldest primitive, so the policy
+    /// (§10.5 rule 3) is enforced against `AdaptQueue` -- a small buffer this
+    /// module owns -- rather than against the mpsc channel's own internal
+    /// buffer. The mpsc channel returned to the caller is fed one message at
+    /// a time from that queue and exists only to satisfy `Node::subscribe`'s
+    /// return type.
     async fn subscribe(
         &self,
         opts: SubscriberOptions,
@@ -170,11 +284,14 @@ impl crate::relay::Node for CanAdapter {
             .await
             .map_err(|_| crate::relay::Error::Closed)?;
 
-        let (tx, rx) = mpsc::channel::<Message>(depth);
-        let mut seq: u64 = 0;
+        let (tx, rx) = mpsc::channel::<Message>(1);
+        let queue = Arc::new(AdaptQueue::new(depth, policy));
 
-        // Spawn a background task per §10.5 rule 1.
+        // Producer task: converts frames and applies the back-pressure
+        // policy against `queue` (§10.5 rule 3).
+        let producer_queue = queue.clone();
         tokio::spawn(async move {
+            let mut seq: u64 = 0;
             loop {
                 match frame_rx.recv().await {
                     None => break,
@@ -182,31 +299,24 @@ impl crate::relay::Node for CanAdapter {
                         let mut msg = to_message(&f);
                         msg.seq = seq;
                         seq += 1;
-
-                        match policy {
-                            BackPressurePolicy::DropNewest => {
-                                // Non-blocking try_send; drop if full.
-                                let _ = tx.try_send(msg);
-                            }
-                            BackPressurePolicy::DropOldest => {
-                                if tx.capacity() == 0 {
-                                    // Attempt a try_recv equivalent by just doing
-                                    // a non-blocking attempt and ignoring failure.
-                                    // mpsc doesn't support drain-one, so we just
-                                    // do a best-effort send.
-                                }
-                                let _ = tx.try_send(msg);
-                            }
-                            BackPressurePolicy::Block => {
-                                if tx.send(msg).await.is_err() {
-                                    break;
-                                }
-                            }
-                        }
+                        producer_queue.push(msg).await;
                     }
                 }
             }
-            // §10.5 rule 2: channel is closed when task exits (tx dropped).
+            producer_queue.close();
+        });
+
+        // Forwarder task: drains `queue` one message at a time into the
+        // external channel, pacing itself on the caller's `recv()` calls.
+        // §10.5 rule 2: the external channel closes when this task exits
+        // (tx is dropped).
+        tokio::spawn(async move {
+            while let Some(msg) = queue.pop().await {
+                if tx.send(msg).await.is_err() {
+                    break; // receiver dropped
+                }
+            }
+            // producer closed and queue drained
         });
 
         Ok(rx)
@@ -283,5 +393,92 @@ mod tests {
         assert_eq!(frames.len(), 1);
         assert_eq!(frames[0].id, 256);
         assert_eq!(frames[0].data, vec![0xDE, 0xAD]);
+    }
+
+    #[tokio::test]
+    async fn adapt_send_invalid_id_is_not_payload_too_large() {
+        // §5.3: ErrInvalidFrame/structural failures are distinct from
+        // ErrPayloadTooLarge. A malformed msg.id must not surface as
+        // PayloadTooLarge, which would mislead a caller checking for an
+        // oversized payload.
+        use crate::mock::MockBus;
+        let mock = Arc::new(MockBus::new());
+        let node = adapt(mock);
+
+        let msg = Message::new(Protocol::Can, "not_a_number", vec![]);
+        let err = node.send(Context::background(), msg).await.unwrap_err();
+        assert_ne!(err, crate::relay::Error::PayloadTooLarge);
+    }
+
+    #[tokio::test]
+    async fn adapt_subscribe_drop_oldest_delivers_messages() {
+        // End-to-end smoke test: DropOldest subscriptions must still wire
+        // up and deliver messages (exact eviction ordering under
+        // concurrent producer/forwarder scheduling is covered
+        // deterministically by `adapt_queue_*` below).
+        use crate::mock::MockBus;
+        use crate::relay::SubscriberOptions;
+
+        let mock = Arc::new(MockBus::new());
+        let node = adapt(mock.clone());
+
+        let mut rx = node
+            .subscribe(SubscriberOptions {
+                channel_depth: 2,
+                back_pressure: BackPressurePolicy::DropOldest,
+                rate_limit_per_sec: 0,
+            })
+            .await
+            .unwrap();
+
+        mock.inject(Frame {
+            id: 0x123,
+            data: vec![0xAB],
+            ..Default::default()
+        })
+        .await;
+
+        let msg = rx.recv().await.unwrap();
+        assert_eq!(msg.id, "291"); // 0x123
+    }
+
+    fn queue_msg(id: &str) -> Message {
+        Message::new(Protocol::Can, id, vec![])
+    }
+
+    #[tokio::test]
+    async fn adapt_queue_drop_oldest_evicts_front() {
+        // RELAY spec §10.5 rule 3: DropOldest must evict the oldest
+        // buffered message when full, not discard the arriving one
+        // (regression test for the bug where DropOldest behaved
+        // identically to DropNewest).
+        let q = AdaptQueue::new(2, BackPressurePolicy::DropOldest);
+        q.push(queue_msg("1")).await;
+        q.push(queue_msg("2")).await;
+        q.push(queue_msg("3")).await; // queue full — evicts "1"
+
+        assert_eq!(q.pop().await.unwrap().id, "2");
+        assert_eq!(q.pop().await.unwrap().id, "3");
+    }
+
+    #[tokio::test]
+    async fn adapt_queue_drop_newest_discards_arriving() {
+        let q = AdaptQueue::new(2, BackPressurePolicy::DropNewest);
+        q.push(queue_msg("1")).await;
+        q.push(queue_msg("2")).await;
+        q.push(queue_msg("3")).await; // queue full — "3" is dropped
+
+        assert_eq!(q.pop().await.unwrap().id, "1");
+        assert_eq!(q.pop().await.unwrap().id, "2");
+    }
+
+    #[tokio::test]
+    async fn adapt_queue_close_drains_then_ends() {
+        let q = AdaptQueue::new(2, BackPressurePolicy::DropOldest);
+        q.push(queue_msg("1")).await;
+        q.close();
+
+        assert_eq!(q.pop().await.unwrap().id, "1");
+        assert!(q.pop().await.is_none());
     }
 }

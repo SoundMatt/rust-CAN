@@ -60,7 +60,7 @@ to it, and `can-utils` is a separate, mature, widely-deployed C codebase that
 never goes through any of this crate's own encode/decode logic.
 
 **Done — both deliverables.** Landed in
-[rust-CAN#27](https://github.com/SoundMatt/rust-CAN/pull/27) as a new
+[rust-CAN#28](https://github.com/SoundMatt/rust-CAN/pull/28) as a new
 `can-interop` CI job (ubuntu-only, probe-then-skip-cleanly if `vcan`/
 `can-utils` are ever unavailable on a runner — mirrors rust-DDS's own
 `cyclone-interop` job posture), separate from and in addition to the

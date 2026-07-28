@@ -18,10 +18,29 @@ path = "src/lib.rs"
 name = "rust-can"
 path = "src/bin/main.rs"
 
+# Test/dev support tool for the "live two-process test harness" and
+# "third-party can-utils cross-validation" interop deliverables (see
+# ROADMAP.md's "Interop testing" section) — a standalone SocketCAN
+# sender/receiver process driven by the real, production
+# `rust_can::socketcan::SocketCanBus`. Not part of the crate's public
+# library API. See src/bin/can_interop_peer.rs's module docs.
+[[bin]]
+name = "can-interop-peer"
+path = "src/bin/can_interop_peer.rs"
+
 [features]
 ## Enables `HmacSha256Auth` — a concrete `MessageAuthenticator` using HMAC-SHA256.
 ## Required for ISO/SAE 21434 CAL-3 security-level integrity (REQ-SEC-006).
 hmac-auth = ["dep:hmac", "dep:sha2"]
+
+## Gates `tests/can_thirdparty_interop.rs` — CAN wire-compatibility tests
+## against live, independent `can-utils` (`cangen`/`candump`) processes on
+## a real kernel `vcan0` interface (ROADMAP.md "Interop testing", deliverable
+## 2 of 2: a third-party, non-rust-CAN oracle beyond the two-process
+## self-interop deliverable). Requires can-utils installed and a real vcan0
+## interface; see the module doc comment at the top of
+## tests/can_thirdparty_interop.rs for how to run it.
+can-utils-interop = []
 
 [dependencies]
 tokio = { version = "1", features = ["full"] }

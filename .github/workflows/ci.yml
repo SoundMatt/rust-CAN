@@ -266,6 +266,63 @@ jobs:
             exit 1
           fi
 
+  # ── CAN interop testing (ROADMAP.md "Interop testing") ─────────────────────
+  can-interop:
+    name: CAN interop (kernel SocketCAN vcan0 + can-utils third-party validator)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ubuntu-cargo-can-interop-${{ hashFiles('**/Cargo.lock') }}
+
+      # Deliverable 1/2: bring up a real kernel vcan interface. Probe-then-
+      # skip-cleanly, not hard-fail: a vcan-capable kernel is not something
+      # every runner should be blocked on (mirrors rust-DDS's
+      # `cyclone-interop` job's own Docker-image probe in
+      # .github/workflows/ci.yml).
+      - name: Set up vcan0 (probe-then-skip)
+        id: vcan
+        run: |
+          if sudo modprobe vcan && sudo ip link add dev vcan0 type vcan && sudo ip link set up vcan0; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+            ip -details link show vcan0
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::vcan kernel module / vcan0 interface could not be set up on this runner — skipping CAN interop tests"
+          fi
+
+      # Deliverable 2/2: can-utils (cangen/candump) is the third-party,
+      # independent oracle — see tests/can_thirdparty_interop.rs's module
+      # doc comment for why CAN doesn't need a third-party network stack
+      # the way rust-DDS needed CycloneDDS. Also probe-then-skip-cleanly.
+      - name: Install can-utils (probe-then-skip)
+        id: canutils
+        if: steps.vcan.outputs.available == 'true'
+        run: |
+          if sudo apt-get update -qq && sudo apt-get install -y can-utils; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::can-utils installation failed — skipping can-utils-based third-party interop tests (two-process self-interop above is unaffected)"
+          fi
+
+      - name: Live two-process CAN self-interop (two real rust-CAN processes on real vcan0)
+        if: steps.vcan.outputs.available == 'true'
+        run: cargo test --release --locked --test can_two_process_interop -- --ignored --test-threads=1
+
+      - name: Live third-party interop against can-utils (cangen/candump)
+        if: steps.vcan.outputs.available == 'true' && steps.canutils.outputs.available == 'true'
+        run: cargo test --release --locked --features can-utils-interop --test can_thirdparty_interop -- --ignored --test-threads=1
+
   # ── DCO sign-off check ─────────────────────────────────────────────────────
   dco:
     name: DCO

@@ -5,8 +5,8 @@
 
 //! Integration tests for rust-CAN.
 //!
-//! Every test is annotated with `//fusa:test` so that rsfusa verify can trace
-//! it to the requirement it verifies.
+//! Every test is annotated with an `fusa:test` tag (in a line comment) so
+//! that rsfusa can trace it to the requirement it verifies.
 
 use std::sync::Arc;
 

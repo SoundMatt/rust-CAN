@@ -57,7 +57,7 @@ jobs:
           d = json.load(sys.stdin)
           assert d['tool'] == 'rust-can', f'bad tool: {d}'
           assert d['protocol'] == 'CAN', f'bad protocol: {d}'
-          assert d['spec_version'] == '1.10', f'bad spec_version: {d}'
+          assert d['spec_version'] == '2.0', f'bad spec_version: {d}'
           print('version JSON OK')
           "
           ./target/release/rust-can capabilities | python3 -c "

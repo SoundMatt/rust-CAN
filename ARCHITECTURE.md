@@ -26,10 +26,13 @@ rust-CAN crate
 ├── virtual_bus    — In-process broadcast bus for testing/simulation [QM]
 ├── mock           — Programmable mock bus for unit tests            [QM]
 ├── socketcan      — Linux AF_CAN SocketCAN transport (Linux only)   [QM]
-├── relay          — RELAY v1.10 types (Context, Message, Protocol)   [QM]
+├── relay          — RELAY v2.0 types (Context, Message, Protocol)   [QM]
 ├── adapt          — RELAY adapter (adapt, to_message, from_message) [QM]
 ├── isotp          — ISO 15765-2 multi-frame transport               [QM→ASIL-A*]
 ├── j1939          — SAE J1939 protocol layer                        [QM]
+├── obdii          — OBD-II (ISO 15031 / SAE J1979) over ISO-TP      [QM]
+├── uds            — UDS (ISO 14229) diagnostic client over ISO-TP   [QM]
+├── recorder       — Candump-compatible recording and replay         [QM]
 ├── dbc            — DBC file parser and signal decoder              [QM]
 ├── crc            — CRC-16/CCITT-FALSE primitive                    [ASIL-B]
 └── bin/main       — CLI entry point (rust-can)                      [QM]
@@ -136,7 +139,7 @@ compiler statically guarantees the absence of data races across these boundaries
 | Interface | Protocol | Direction | Notes |
 |---|---|---|---|
 | SocketCAN kernel socket | AF_CAN / SOCK_RAW | Bidirectional | Linux only; `cfg(target_os = "linux")` |
-| RELAY message bus | RELAY v1.10 | Bidirectional | Via `adapt()` wrapper |
+| RELAY message bus | RELAY v2.0 | Bidirectional | Via `adapt()` wrapper |
 | DBC file | Text (line-oriented) | Input | Parsed in-memory; no file I/O |
 
 ---

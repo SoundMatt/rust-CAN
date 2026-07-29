@@ -1,6 +1,11 @@
 # rust-CAN Roadmap
 
-## v0.1.0 — Foundation (current)
+Note: this roadmap's milestone numbers (v0.1.0/v0.2.0/v0.3.0) track feature
+groupings, not the crate's actual published version (`Cargo.toml` is
+currently `0.4.0` — point releases have shipped ahead of finishing every
+item in the milestone they were cut from).
+
+## v0.1.0 — Foundation
 
 - [x] Core types: Frame, Filter, LoanedFrame, validate_frame
 - [x] Bus trait (async, Send+Sync)
@@ -12,18 +17,20 @@
 - [x] J1939 — SAE J1939 PGN addressing over 29-bit extended IDs
 - [x] DBC parser — signal decode
 - [x] E2E safety — CRC-16/CCITT-FALSE, sequence counter
-- [x] RELAY v1.10 adapter — Adapt(), ToMessage(), FromMessage()
+- [x] RELAY v2.0 adapter — Adapt(), ToMessage(), FromMessage()
 - [x] CLI binary `rust-can` — version, capabilities, status, send, subscribe
 - [x] ASIL-B safety evidence — FMEA, TARA, safety case, rsfusa CI
-- [x] RELAY conformance — spec v1.10
+- [x] RELAY conformance — spec v2.0
 
-## v0.2.0 — Robustness
+## v0.2.0 — Robustness (current)
 
-- [ ] OBD-II (ISO 15031) over ISO-TP
-- [ ] UDS (ISO 14229) over ISO-TP
+- [x] OBD-II (ISO 15031) over ISO-TP
+- [x] UDS (ISO 14229) over ISO-TP
 - [ ] CAN XL frame support in SocketCAN
 - [ ] J1939 multi-packet TP (BAM + CMDT)
-- [ ] candump log record/replay in CLI
+- [ ] candump log record/replay in CLI (the `recorder` module's
+      `record()`/`replay()` are implemented as a library API; not yet
+      wired up as CLI subcommands)
 - [ ] ASIL-C evidence gap analysis
 - [ ] `relay conform` CLI integration tests
 - [x] CAN interop testing — live two-process self-interop + can-utils

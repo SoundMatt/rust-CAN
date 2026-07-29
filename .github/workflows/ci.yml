@@ -289,15 +289,30 @@ jobs:
       # every runner should be blocked on (mirrors rust-DDS's
       # `cyclone-interop` job's own Docker-image probe in
       # .github/workflows/ci.yml).
+      #
+      # `modprobe vcan` alone reliably failed on GitHub-hosted ubuntu-latest
+      # runners with "Module vcan not found" — not because the running
+      # kernel lacks vcan support, but because the vcan.ko file itself isn't
+      # on disk: Ubuntu ships it in the separate `linux-modules-extra-*`
+      # package, not the base `linux-image` the runner boots from. Installing
+      # that package for the exact running kernel first is a real fix for
+      # the underlying environment gap, not a workaround; the probe-then-skip
+      # fallback stays in place for any runner where that install itself
+      # isn't possible (e.g. no apt access, non-Ubuntu image, or a kernel
+      # whose extra-modules package was already removed).
       - name: Set up vcan0 (probe-then-skip)
         id: vcan
         run: |
-          if sudo modprobe vcan && sudo ip link add dev vcan0 type vcan && sudo ip link set up vcan0; then
+          if sudo apt-get update -qq \
+              && sudo apt-get install -y "linux-modules-extra-$(uname -r)" \
+              && sudo modprobe vcan \
+              && sudo ip link add dev vcan0 type vcan \
+              && sudo ip link set up vcan0; then
             echo "available=true" >> "$GITHUB_OUTPUT"
             ip -details link show vcan0
           else
             echo "available=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::vcan kernel module / vcan0 interface could not be set up on this runner — skipping CAN interop tests"
+            echo "::warning::vcan kernel module / vcan0 interface could not be set up on this runner (kernel: $(uname -r)) — CAN interop tests are being SKIPPED, not run. This job's green check does not mean live vcan0 interop was verified; see ROADMAP.md's Interop testing section."
           fi
 
       # Deliverable 2/2: can-utils (cangen/candump) is the third-party,
@@ -312,7 +327,7 @@ jobs:
             echo "available=true" >> "$GITHUB_OUTPUT"
           else
             echo "available=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::can-utils installation failed — skipping can-utils-based third-party interop tests (two-process self-interop above is unaffected)"
+            echo "::warning::can-utils installation failed — SKIPPING can-utils-based third-party interop tests (two-process self-interop above is unaffected). This job's green check does not mean the third-party can-utils cross-validation deliverable was verified."
           fi
 
       - name: Live two-process CAN self-interop (two real rust-CAN processes on real vcan0)
@@ -322,6 +337,23 @@ jobs:
       - name: Live third-party interop against can-utils (cangen/candump)
         if: steps.vcan.outputs.available == 'true' && steps.canutils.outputs.available == 'true'
         run: cargo test --release --locked --features can-utils-interop --test can_thirdparty_interop -- --ignored --test-threads=1
+
+      # Surfaced in the run's Summary page (top of the Actions UI, not
+      # buried in step logs) so a green check on this job can never be
+      # silently mistaken for "live vcan0 interop was verified" — see #38.
+      - name: Report actual coverage
+        if: always()
+        run: |
+          if [ "${{ steps.vcan.outputs.available }}" != "true" ]; then
+            echo "### :warning: CAN interop: SKIPPED — no live coverage this run" >> "$GITHUB_STEP_SUMMARY"
+            echo "vcan0 could not be set up on this runner. Neither the two-process self-interop nor the can-utils cross-validation test ran." >> "$GITHUB_STEP_SUMMARY"
+          elif [ "${{ steps.canutils.outputs.available }}" != "true" ]; then
+            echo "### :warning: CAN interop: PARTIAL — can-utils cross-validation SKIPPED" >> "$GITHUB_STEP_SUMMARY"
+            echo "vcan0 came up and the two-process self-interop test ran, but can-utils failed to install, so the third-party cross-validation deliverable did not run." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "### :white_check_mark: CAN interop: full live coverage this run" >> "$GITHUB_STEP_SUMMARY"
+            echo "vcan0 came up and both the two-process self-interop and can-utils cross-validation tests ran for real." >> "$GITHUB_STEP_SUMMARY"
+          fi
 
   # ── DCO sign-off check ─────────────────────────────────────────────────────
   dco:

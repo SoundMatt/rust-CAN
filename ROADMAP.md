@@ -26,9 +26,11 @@
 - [ ] candump log record/replay in CLI
 - [ ] ASIL-C evidence gap analysis
 - [ ] `relay conform` CLI integration tests
-- [x] CAN interop testing — live two-process self-interop + can-utils
+- [ ] CAN interop testing — live two-process self-interop + can-utils
       third-party validator, both over a real kernel `vcan0` interface
-      (see "Interop testing" section below)
+      (see "Interop testing" section below; code/tests landed, but not
+      yet confirmed actually executing live in CI rather than
+      probe-then-skipping)
 
 ## v0.3.0 — Ecosystem
 
@@ -59,12 +61,21 @@ kernel's `vcan0` net device broadcasts real CAN frames to every socket bound
 to it, and `can-utils` is a separate, mature, widely-deployed C codebase that
 never goes through any of this crate's own encode/decode logic.
 
-**Done — both deliverables.** Landed in
-[rust-CAN#28](https://github.com/SoundMatt/rust-CAN/pull/28) as a new
+**Code landed, live execution not yet confirmed.** Both deliverables landed
+in [rust-CAN#28](https://github.com/SoundMatt/rust-CAN/pull/28) as a new
 `can-interop` CI job (ubuntu-only, probe-then-skip-cleanly if `vcan`/
 `can-utils` are ever unavailable on a runner — mirrors rust-DDS's own
 `cyclone-interop` job posture), separate from and in addition to the
-`conformance` job above:
+`conformance` job above — **but every observed run of that job through
+[rust-CAN#38](https://github.com/SoundMatt/rust-CAN/issues/38) took the
+probe-then-skip path**: `sudo modprobe vcan` failed on GitHub-hosted
+`ubuntu-latest` runners because the `vcan.ko` module file isn't present in
+the base image (Ubuntu ships it in the separate `linux-modules-extra-*`
+package). The `can-interop` job now installs that package before probing,
+which should make the tests below actually execute — this section will be
+updated once that's confirmed by an observed run that took the live path,
+not just merged CI going green (a green check on this job has never meant
+"live vcan0 interop was verified" by itself; see the job's Summary output).
 
 - **Live two-process self-interop** — `can-interop-peer`
   (`src/bin/can_interop_peer.rs`, a `[[bin]]` target, not part of the public

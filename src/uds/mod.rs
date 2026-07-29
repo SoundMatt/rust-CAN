@@ -49,6 +49,17 @@ pub const SID_NEGATIVE_RESPONSE: u8 = 0x7F;
 
 const POSITIVE_RESPONSE_OFFSET: u8 = 0x40;
 
+/// NRC 0x78 — requestCorrectlyReceivedResponsePending: the ECU has accepted
+/// the request and is still processing it; per ISO 14229 §8.7 the client
+/// MUST keep waiting for the real response rather than treating this as a
+/// failure.
+const NRC_RESPONSE_PENDING: u8 = 0x78;
+
+/// Upper bound on consecutive NRC 0x78 responses before `request()` gives up.
+/// Bounds the wait against a misbehaving ECU that never stops sending
+/// "pending" — real ECUs send only a handful before the final response.
+const MAX_RESPONSE_PENDING_RETRIES: u32 = 16;
+
 // ---------------------------------------------------------------------------
 // Enums
 // ---------------------------------------------------------------------------
@@ -304,20 +315,40 @@ impl Client {
         Ok(())
     }
 
+    /// All UDS requests and responses are transported over `IsoTpConn`
+    /// (ISO 15765-2) — this is the single choke point every service method
+    /// above routes through.
+    //fusa:req REQ-UDS-009
+    /// NRC 0x78 (response pending) is retried transparently rather than
+    /// surfaced as an error; every other negative response is surfaced as
+    /// `NegativeResponseError`.
+    //fusa:req REQ-UDS-008
     async fn request(&self, ctx: Context, req: &[u8]) -> Result<Vec<u8>, Error> {
         self.conn.send(ctx.clone(), req).await?;
-        let resp = self.conn.recv(ctx).await?;
-        if resp.is_empty() {
-            return Err(Error::Other("uds: empty response".into()));
+
+        for _ in 0..=MAX_RESPONSE_PENDING_RETRIES {
+            let resp = self.conn.recv(ctx.clone()).await?;
+            if resp.is_empty() {
+                return Err(Error::Other("uds: empty response".into()));
+            }
+            if resp[0] == SID_NEGATIVE_RESPONSE {
+                let service = if resp.len() >= 2 { resp[1] } else { 0 };
+                let nrc = if resp.len() >= 3 { resp[2] } else { 0 };
+                if nrc == NRC_RESPONSE_PENDING {
+                    // ECU is still working — keep waiting for the real
+                    // response instead of surfacing this as a failure.
+                    continue;
+                }
+                return Err(Error::Other(
+                    NegativeResponseError { service, nrc }.to_string(),
+                ));
+            }
+            return Ok(resp);
         }
-        if resp[0] == SID_NEGATIVE_RESPONSE {
-            let service = if resp.len() >= 2 { resp[1] } else { 0 };
-            let nrc = if resp.len() >= 3 { resp[2] } else { 0 };
-            return Err(Error::Other(
-                NegativeResponseError { service, nrc }.to_string(),
-            ));
-        }
-        Ok(resp)
+
+        Err(Error::Other(
+            "uds: too many consecutive response-pending (NRC 0x78) retries".into(),
+        ))
     }
 }
 
@@ -378,5 +409,143 @@ mod tests {
         // seed level 0x01 → key level 0x02 per ISO 14229 §10.4.2
         assert_eq!(0x01_u8 + 1, 0x02);
         assert_eq!(0x03_u8 + 1, 0x04);
+    }
+
+    // -- End-to-end transport tests -----------------------------------------
+    //
+    // The tests above exercise pure logic (enum values, error formatting);
+    // these exercise `Client::request()` over a real `IsoTpConn` pair on a
+    // `VirtualBus`, with a fake ECU peer on the other end, so REQ-UDS-008's
+    // NRC 0x78 retry behavior and REQ-UDS-009's transport claim are actually
+    // verified end-to-end rather than only asserted by tag.
+
+    use crate::isotp::Config as IsoTpConfig;
+    use crate::relay::Context;
+    use crate::virtual_bus::VirtualBus;
+    use std::sync::Arc;
+
+    async fn client_and_ecu_conn() -> (IsoTpConn, IsoTpConn) {
+        let bus = Arc::new(VirtualBus::new());
+        let client_conn = IsoTpConn::new(
+            bus.clone(),
+            IsoTpConfig {
+                tx_id: 0x7E0,
+                rx_id: 0x7E8,
+                timeout: std::time::Duration::from_millis(200),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+        let ecu_conn = IsoTpConn::new(
+            bus,
+            IsoTpConfig {
+                tx_id: 0x7E8,
+                rx_id: 0x7E0,
+                timeout: std::time::Duration::from_millis(200),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+        (client_conn, ecu_conn)
+    }
+
+    /// REQ-UDS-009: a UDS request/response round-trips through a real
+    /// `IsoTpConn` pair — not just an in-memory call.
+    //fusa:test REQ-UDS-009
+    #[tokio::test]
+    async fn request_is_transported_over_isotp() {
+        let (client_conn, ecu_conn) = client_and_ecu_conn().await;
+        let client = Client::new(client_conn);
+
+        let ecu = tokio::spawn(async move {
+            let req = ecu_conn.recv(Context::background()).await.unwrap();
+            assert_eq!(req, vec![SID_DIAGNOSTIC_SESSION_CONTROL, 0x03]);
+            ecu_conn
+                .send(
+                    Context::background(),
+                    &[
+                        SID_DIAGNOSTIC_SESSION_CONTROL + POSITIVE_RESPONSE_OFFSET,
+                        0x03,
+                    ],
+                )
+                .await
+                .unwrap();
+        });
+
+        client
+            .diagnostic_session_control(Context::background(), SessionType::Extended)
+            .await
+            .expect("request should succeed over a real IsoTpConn transport");
+        ecu.await.unwrap();
+    }
+
+    /// REQ-UDS-008: NRC 0x78 (response pending) is retried transparently —
+    /// the client must not surface it as an error — while it still keeps
+    /// waiting for, and returns, the eventual real response.
+    //fusa:test REQ-UDS-008
+    #[tokio::test]
+    async fn request_retries_transparently_on_response_pending_nrc() {
+        let (client_conn, ecu_conn) = client_and_ecu_conn().await;
+        let client = Client::new(client_conn);
+
+        let ecu = tokio::spawn(async move {
+            let _req = ecu_conn.recv(Context::background()).await.unwrap();
+            // Send two "response pending" NRCs before the real answer.
+            for _ in 0..2 {
+                ecu_conn
+                    .send(
+                        Context::background(),
+                        &[
+                            SID_NEGATIVE_RESPONSE,
+                            SID_TESTER_PRESENT,
+                            NRC_RESPONSE_PENDING,
+                        ],
+                    )
+                    .await
+                    .unwrap();
+            }
+            ecu_conn
+                .send(
+                    Context::background(),
+                    &[SID_TESTER_PRESENT + POSITIVE_RESPONSE_OFFSET, 0x00],
+                )
+                .await
+                .unwrap();
+        });
+
+        client
+            .tester_present(Context::background(), false)
+            .await
+            .expect("0x78 responses must be retried, not surfaced as an error");
+        ecu.await.unwrap();
+    }
+
+    /// REQ-UDS-008: a negative response with an NRC other than 0x78 MUST
+    /// still surface as `NegativeResponseError` immediately, not be retried.
+    //fusa:test REQ-UDS-008
+    #[tokio::test]
+    async fn request_surfaces_non_pending_negative_response_immediately() {
+        let (client_conn, ecu_conn) = client_and_ecu_conn().await;
+        let client = Client::new(client_conn);
+
+        let ecu = tokio::spawn(async move {
+            let _req = ecu_conn.recv(Context::background()).await.unwrap();
+            ecu_conn
+                .send(
+                    Context::background(),
+                    &[SID_NEGATIVE_RESPONSE, SID_TESTER_PRESENT, 0x31], // requestOutOfRange
+                )
+                .await
+                .unwrap();
+        });
+
+        let err = client
+            .tester_present(Context::background(), false)
+            .await
+            .expect_err("a non-0x78 NRC must surface as an error, not be retried");
+        assert!(err.to_string().contains("0x31"));
+        ecu.await.unwrap();
     }
 }

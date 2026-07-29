@@ -116,7 +116,7 @@ jobs:
           key: ubuntu-cargo-safety-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Install rsfusa
-        run: cargo install --git https://github.com/SoundMatt/rust-FuSa --tag v0.3.10 rsfusa --locked
+        run: cargo install --git https://github.com/SoundMatt/rust-FuSa --tag v0.3.14 rsfusa --locked
 
       - name: Build release binary (needed for qualify)
         run: cargo build --release --locked
@@ -125,13 +125,33 @@ jobs:
         run: cargo test --locked
 
       - name: Capture test evidence with rsfusa
-        run: rsfusa verify --dir . || true
+        # Deliberately not gating: rsfusa v0.3.14's `verify` shells out to
+        # `cargo test -- --test-output=immediate`, and `--test-output` is not
+        # a real cargo/libtest flag (it's a cargo-nextest option) — every
+        # test binary rejects it, `cargo test` exits 101, and rsfusa reports
+        # a nonsensical "0 failed, 0 passed" despite the real, passing
+        # `cargo test` run in the step just above. This is an upstream
+        # rust-FuSa bug this repo cannot fix from its own config (filed:
+        # SoundMatt/rust-FuSa#46) — gating on it would make this job
+        # permanently red for a reason outside this repo's control, so it
+        # stays advisory. The mismatch is now surfaced loudly instead of
+        # silently discarded: if rsfusa ever reports 0 tests despite the
+        # real suite passing, that's this exact upstream bug, not a real
+        # regression here.
+        run: |
+          rsfusa verify --dir . || true
+          if [ -f .fusa-evidence.json ]; then
+            passed=$(python3 -c "import json; print(json.load(open('.fusa-evidence.json'))['summary']['passed'])")
+            if [ "$passed" = "0" ]; then
+              echo "::warning::rsfusa verify reported 0 tests passed despite the real 'cargo test' run above passing — this is the known upstream rust-FuSa bug SoundMatt/rust-FuSa#46 (invalid --test-output=immediate flag), not a regression in this repo. .fusa-evidence.json is not trustworthy until that's fixed upstream."
+            fi
+          fi
 
       - name: Coding standard lint (ISO 26262 Part 6)
-        run: rsfusa lint --dir . --format json --output lint-report.json || true
+        run: rsfusa lint --dir . --format json --output lint-report.json
 
       - name: Static analysis
-        run: rsfusa analyze --dir . --format json --output analyze-report.json || true
+        run: rsfusa analyze --dir . --format json --output analyze-report.json
 
       - name: Safety check (§20.1.2 — gates on ERROR findings)
         # Gating: §20.1 item 2 requires the standard check to fail the job
@@ -145,20 +165,70 @@ jobs:
         run: rsfusa check --dir . --format json --output check-report.json
 
       - name: Safety check SARIF, strict (GitHub code scanning)
+        # Deliberately not gating, same rationale as above: --strict also
+        # fails on WARNING-severity findings (function length / nesting
+        # depth), which is a known, tracked code-quality backlog, not a
+        # safety regression. Kept for Code Scanning visibility only.
         run: rsfusa check --dir . --strict --format sarif --output results.sarif || true
 
       - name: Cyclomatic complexity V(G)
+        # Deliberately not gating: this repo currently has several
+        # functions over rsfusa's complexity threshold (e.g.
+        # validate_frame(), DBC parsing) — a known, tracked code-quality
+        # backlog like the WARNING-severity --strict findings above, not a
+        # safety regression to gate a build on.
         run: rsfusa comp --dir . --format json --output comp-report.json || true
 
-      - name: Requirement traceability matrix (§20.1.2)
+      - name: Requirement traceability matrix (§20.1.2 — gates on 100% traced + tested)
         # Gating: §20.1 item 2 requires 100% requirement traceability (every
-        # requirement traced and tested) to fail the job otherwise.
+        # requirement traced, and every test-verified requirement actually
+        # tested) to fail the job otherwise. `rsfusa trace`'s own exit code
+        # doesn't enforce this (it always exits 0), so the coverage numbers
+        # are asserted explicitly here against .fusa-reqs.json's
+        # verificationMethod: a requirement counts as traced if it has any
+        # //fusa:req|impl|test|sec-test tag, and as tested if it has a
+        # //fusa:test or //fusa:sec-test tag — only requirements whose
+        # verificationMethod is "test" are required to be tested (an
+        # "inspection"-verified requirement is traced but not necessarily
+        # unit-tested).
         run: |
           rsfusa trace --dir . --format json --output trace.json
           rsfusa trace --dir . --format text
+          python3 - <<'PYEOF'
+          import json
+          import sys
+
+          reqs_doc = json.load(open(".fusa-reqs.json"))
+          reqs = reqs_doc["requirements"] if isinstance(reqs_doc, dict) else reqs_doc
+          trace = json.load(open("trace.json"))
+          tags = trace["tags"]
+
+          all_ids = {r["id"] for r in reqs}
+          traced_ids = {t["requirementId"] for t in tags}
+          tested_ids = {t["requirementId"] for t in tags if t["kind"] in ("test", "sec-test")}
+          test_method_ids = {r["id"] for r in reqs if r.get("verificationMethod") == "test"}
+
+          untraced = sorted(all_ids - traced_ids)
+          untested = sorted(test_method_ids - tested_ids)
+
+          ok = True
+          if untraced:
+              print(f"FAIL: {len(untraced)} untraced requirement(s): {untraced}")
+              ok = False
+          if untested:
+              print(f"FAIL: {len(untested)} test-verified requirement(s) with no test tag: {untested}")
+              ok = False
+
+          if not ok:
+              sys.exit(1)
+          print(
+              f"OK: {len(all_ids)}/{len(all_ids)} requirements traced, "
+              f"{len(test_method_ids)}/{len(test_method_ids)} test-verified requirements tested"
+          )
+          PYEOF
 
       - name: FMEA
-        run: rsfusa fmea --dir . || true
+        run: rsfusa fmea --dir .
 
       - name: Threat analysis (TARA)
         # Gating: §20.1 item 2 requires safety-lifecycle findings such as
@@ -171,25 +241,36 @@ jobs:
         run: rsfusa cyber --dir . --format json --output cyber-report.json
 
       - name: Boundary diagram
-        run: rsfusa boundary --dir . || true
+        run: rsfusa boundary --dir .
 
       - name: HARA
-        run: rsfusa hara show --dir . || true
-
-      - name: Safety case assembly
-        run: rsfusa safety-case --dir . || true
-
-      - name: ISO 26262 Part 6 gap report
-        run: rsfusa iso26262 --dir . --format json --output iso26262-gap-report.json || true
+        run: rsfusa hara show --dir .
 
       - name: Tool qualification
+        # Must run before "Safety case assembly": the safety case's
+        # required-evidence check treats qualify-report.json as a required
+        # input, so producing it after safety-case (as this job used to)
+        # made safety-case *always* report qualify-report.json missing
+        # regardless of whether tool qualification actually ran.
         run: rsfusa qualify
+
+      - name: Safety case assembly
+        run: rsfusa safety-case --dir .
+
+      - name: ISO 26262 Part 6 gap report
+        # Deliberately not gating: this is a maturity/gap report (rsfusa's
+        # own §9.3 "MAY" command class) against the full ISO 26262 Part 6
+        # objective set — several objectives (e.g. restricted language
+        # subset, data coupling analysis, documentation archive) are
+        # system-level concerns out of scope for a standalone library and
+        # are expected to show as gaps, not a regression to gate a build on.
+        run: rsfusa iso26262 --dir . --format json --output iso26262-gap-report.json || true
 
       - name: Release artifacts (SBOM, provenance, manifest)
         run: rsfusa release --dir .
 
       - name: Audit pack
-        run: rsfusa audit-pack --output audit-pack.zip || true
+        run: rsfusa audit-pack --output audit-pack.zip
 
       - name: Upload SARIF to GitHub Code Scanning
         if: always() && github.event_name != 'pull_request'

@@ -255,7 +255,7 @@ impl IsoTpConn {
         let mut payload = &payload[first_chunk_len..];
 
         //fusa:req REQ-ISOTP-003
-        let fc = self.wait_fc(tmo).await?;
+        let mut fc = self.wait_fc(tmo).await?;
         if fc[0] & 0x0F == FC_OVERFLOW {
             return Err(Error::Other("isotp: receiver overflow".into()));
         }
@@ -264,10 +264,15 @@ impl IsoTpConn {
         let mut block_count: u32 = 0;
 
         while !payload.is_empty() {
-            // Handle wait frames.
-            let mut fc_current = fc.clone();
-            if fc_current[0] & 0x0F == FC_WAIT {
-                fc_current = self.wait_fc(tmo).await?;
+            // Handle wait frames: block until the receiver sends a non-WAIT
+            // FC, adopting whatever BlockSize/STmin it carries — a WAIT can
+            // legitimately be followed by another WAIT, so this must loop
+            // rather than assume a single re-check clears it.
+            while fc[0] & 0x0F == FC_WAIT {
+                fc = self.wait_fc(tmo).await?;
+                if fc[0] & 0x0F == FC_OVERFLOW {
+                    return Err(Error::Other("isotp: receiver overflow".into()));
+                }
                 block_count = 0;
             }
 
@@ -285,22 +290,25 @@ impl IsoTpConn {
             sn = sn.wrapping_add(1);
             block_count += 1;
 
-            // ST_min delay.
-            let st = st_min_to_duration(fc_current[2]);
+            // ST_min delay, per the most recently received FC.
+            let st = st_min_to_duration(fc[2]);
             if !st.is_zero() {
                 tokio::time::sleep(st).await;
             }
 
             // Block size check: if block_size > 0 and we've sent that many,
-            // wait for the next flow control frame.
-            let bs = fc_current[1];
+            // wait for the next flow control frame and adopt its
+            // BlockSize/STmin for the remainder of the transfer — ISO-TP
+            // allows (and real ECUs commonly do) the receiver to change
+            // pacing parameters mid-transfer, so a later FC must not be
+            // discarded in favor of the first one.
+            let bs = fc[1];
             if bs > 0 && block_count >= bs as u32 && !payload.is_empty() {
-                let new_fc = self.wait_fc(tmo).await?;
-                if new_fc[0] & 0x0F == FC_OVERFLOW {
+                fc = self.wait_fc(tmo).await?;
+                if fc[0] & 0x0F == FC_OVERFLOW {
                     return Err(Error::Other("isotp: receiver overflow".into()));
                 }
                 block_count = 0;
-                let _ = new_fc;
             }
         }
 
@@ -315,8 +323,14 @@ impl IsoTpConn {
             .map_err(|_| Error::Timeout)?
             .ok_or(Error::Closed)?;
 
-        if f.data.is_empty() || f.data[0] & 0xF0 != TYPE_FC {
-            return Err(Error::Other("isotp: expected flow control frame".into()));
+        // A Flow Control PDU is at minimum 3 bytes (PCI/FS, BlockSize,
+        // STmin) — a malformed or truncated FC must be rejected here rather
+        // than let callers index into it and panic (a peer sending a
+        // short/garbage FC must not be able to crash the sender).
+        if f.data.len() < 3 || f.data[0] & 0xF0 != TYPE_FC {
+            return Err(Error::Other(
+                "isotp: malformed or truncated flow control frame".into(),
+            ));
         }
         Ok(f.data.clone())
     }
@@ -433,5 +447,122 @@ mod tests {
         let conn = IsoTpConn::new(bus, cfg).await.unwrap();
         let result = conn.recv(Context::background()).await;
         assert!(matches!(result, Err(Error::Timeout)));
+    }
+
+    /// A malformed/truncated Flow Control frame (fewer than 3 bytes) must be
+    /// rejected as a protocol error, not cause an index-out-of-bounds panic
+    /// in `send_multi_frame()`. Regression test for a peer replying to a
+    /// First Frame with a 1-byte FC frame.
+    //fusa:test REQ-ISOTP-003
+    //fusa:test REQ-ISOTP-005
+    #[tokio::test]
+    async fn malformed_flow_control_frame_is_rejected_not_panicking() {
+        let bus = make_bus();
+        let sender = IsoTpConn::new(bus.clone(), make_cfg(0x7E0, 0x7E8))
+            .await
+            .unwrap();
+
+        // Fake peer: listens for the sender's frames on 0x7E0 and answers
+        // its First Frame with a truncated (1-byte) FC frame.
+        let peer_rx = bus
+            .subscribe(
+                vec![Filter {
+                    id: 0x7E0,
+                    mask: 0x7FF,
+                }],
+                SubscriberOptions::default(),
+            )
+            .await
+            .unwrap();
+
+        // 20 bytes → requires a multi-frame send.
+        let payload: Vec<u8> = (0..20).collect();
+        let send_task =
+            tokio::spawn(async move { sender.send(Context::background(), &payload).await });
+
+        let ff = peer_rx.recv().await.unwrap();
+        assert_eq!(ff.data[0] & 0xF0, TYPE_FF, "expected a First Frame");
+
+        let bad_fc = Frame {
+            id: 0x7E8,
+            data: vec![TYPE_FC | FC_CTS], // 1 byte — missing BlockSize/STmin
+            ..Default::default()
+        };
+        bus.send(Context::background(), bad_fc).await.unwrap();
+
+        // Must not panic: send_task.await() itself would return a JoinError
+        // (panic) if the fix regressed.
+        let result = send_task.await.expect("sender task must not panic");
+        assert!(
+            matches!(result, Err(Error::Other(_))),
+            "expected a protocol error, got {result:?}"
+        );
+    }
+
+    /// The sender must adopt updated BlockSize/STmin from a Flow Control
+    /// frame received mid-transfer, not keep reusing the first FC forever.
+    /// Regression test: the peer initially throttles to BlockSize=1, then
+    /// raises it to BlockSize=2 on the next FC; a sender that ignores the
+    /// update will request a third FC that the peer never sends, and the
+    /// send will time out instead of completing.
+    //fusa:test REQ-ISOTP-003
+    #[tokio::test]
+    async fn mid_transfer_flow_control_update_is_honored() {
+        let bus = make_bus();
+        let sender_cfg = make_cfg(0x7E0, 0x7E8); // 100 ms timeout
+        let sender = IsoTpConn::new(bus.clone(), sender_cfg).await.unwrap();
+
+        let peer_rx = bus
+            .subscribe(
+                vec![Filter {
+                    id: 0x7E0,
+                    mask: 0x7FF,
+                }],
+                SubscriberOptions::default(),
+            )
+            .await
+            .unwrap();
+
+        // 6 bytes in the FF + 3 consecutive frames of 7 bytes each = 27 bytes.
+        let payload: Vec<u8> = (0..27).collect();
+        let send_task =
+            tokio::spawn(async move { sender.send(Context::background(), &payload).await });
+
+        // First Frame, then answer with BlockSize=1 (send one CF, then wait).
+        let ff = peer_rx.recv().await.unwrap();
+        assert_eq!(ff.data[0] & 0xF0, TYPE_FF);
+        bus.send(
+            Context::background(),
+            Frame {
+                id: 0x7E8,
+                data: vec![TYPE_FC | FC_CTS, 1, 0],
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+
+        // First CF, then raise BlockSize to 2 for the remaining two CFs.
+        let cf1 = peer_rx.recv().await.unwrap();
+        assert_eq!(cf1.data[0] & 0xF0, TYPE_CF);
+        bus.send(
+            Context::background(),
+            Frame {
+                id: 0x7E8,
+                data: vec![TYPE_FC | FC_CTS, 2, 0],
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+
+        // If the sender correctly adopted BlockSize=2, it sends the
+        // remaining two CFs back-to-back and completes without requesting
+        // a third FC (which this test never sends).
+        let result = tokio::time::timeout(Duration::from_millis(500), send_task)
+            .await
+            .expect("send task should complete without needing another FC")
+            .expect("sender task must not panic");
+        assert!(result.is_ok(), "expected send to succeed, got {result:?}");
     }
 }

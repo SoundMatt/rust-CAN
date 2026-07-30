@@ -329,12 +329,22 @@ jobs:
         run: cargo build --release --bin rust-can --locked
 
       - name: Install relay
-        run: go install github.com/SoundMatt/RELAY/cmd/relay@v1.10.0
+        # v2.0.0 (current) is not installable via `go install` — its go.mod
+        # module path wasn't bumped to the required `/v2` suffix, so Go's
+        # semantic import versioning rejects it (filed: SoundMatt/RELAY#70).
+        # v1.14.0 is the newest tag that installs cleanly; it also carries
+        # v1.13's fix for the `go:embed` glob bug that made golden error
+        # vectors unreachable through `relay interop`/`relay convert`
+        # (previously pinned here at v1.10.0, which predates that fix and
+        # was blind to the whole reject-path vector category), and has no
+        # CAN-relevant changes between it and v2.0.0 (v1.14 and v2.0 are
+        # both RCP-only changes; rust-CAN is CAN-only).
+        run: go install github.com/SoundMatt/RELAY/cmd/relay@v1.14.0
 
       - name: RELAY conformance (strict)
         run: relay conform --strict ./target/release/rust-can
 
-      - name: RELAY interop (CAN golden vectors — must be EQUIVALENT)
+      - name: RELAY interop (CAN golden vectors — must be EQUIVALENT or SKIP)
         run: |
           # Capture output without propagating exit code — relay interop exits
           # non-zero when any vector is non-EQUIVALENT, but we gate only on
@@ -342,8 +352,19 @@ jobs:
           # SOMEIP vectors correctly exit 2 as unsupported).
           interop_out=$(relay interop ./target/release/rust-can 2>&1) || true
           echo "$interop_out"
-          if echo "$interop_out" | grep -A2 "(CAN)" | grep -qE "ERROR|FAIL"; then
-            echo "FAIL: one or more CAN golden vectors not EQUIVALENT"
+          # Match each CAN block's per-participant result lines (2-space
+          # indented, e.g. "  rust-can               EQUIVALENT") and fail on
+          # anything that isn't EQUIVALENT or SKIP — not an allowlist of
+          # failure substrings. relay's own interopVerdict() can return
+          # EQUIVALENT, SKIP, ERROR, or MISMATCH; a prior version of this
+          # gate only matched "ERROR|FAIL", which meant a genuine
+          # non-equivalence (reported as "MISMATCH", not "ERROR" or "FAIL")
+          # between rust-can and the reference implementation could never be
+          # caught here.
+          bad=$(echo "$interop_out" | grep -A2 "(CAN)" | grep -E '^  \S' | grep -vE 'EQUIVALENT|SKIP' || true)
+          if [ -n "$bad" ]; then
+            echo "FAIL: one or more CAN golden vectors not EQUIVALENT/SKIP:"
+            echo "$bad"
             exit 1
           fi
 

@@ -19,8 +19,8 @@
 
 ## v0.2.0 — Robustness
 
-- [ ] OBD-II (ISO 15031) over ISO-TP
-- [ ] UDS (ISO 14229) over ISO-TP
+- [x] OBD-II (ISO 15031) over ISO-TP
+- [x] UDS (ISO 14229) over ISO-TP
 - [ ] CAN XL frame support in SocketCAN
 - [ ] J1939 multi-packet TP (BAM + CMDT)
 - [ ] candump log record/replay in CLI

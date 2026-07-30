@@ -188,6 +188,7 @@ impl IsoTpConn {
 
                 // Receive consecutive frames.
                 let mut sn: u8 = 1;
+                let mut cf_in_block: u8 = 0;
                 while buf.len() < len {
                     let cf = timeout(tmo, self.rx.recv())
                         .await
@@ -214,6 +215,25 @@ impl IsoTpConn {
                     let chunk = &cf.data[1..];
                     let take = chunk.len().min(remaining);
                     buf.extend_from_slice(&chunk[..take]);
+
+                    // Per ISO 15765-2, a non-zero BlockSize obligates the
+                    // receiver to issue a fresh CTS flow-control frame after
+                    // every `block_size` consecutive frames. Without this a
+                    // conformant sender configured with BS>0 stalls at the
+                    // block boundary waiting for the next FC.
+                    cf_in_block = cf_in_block.wrapping_add(1);
+                    if self.cfg.block_size != 0
+                        && cf_in_block == self.cfg.block_size
+                        && buf.len() < len
+                    {
+                        let fc_frame = self.make_frame(vec![
+                            TYPE_FC | FC_CTS,
+                            self.cfg.block_size,
+                            self.cfg.st_min,
+                        ]);
+                        self.bus.send(Context::background(), fc_frame).await?;
+                        cf_in_block = 0;
+                    }
                 }
 
                 Ok(buf)

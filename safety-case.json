@@ -11,11 +11,11 @@
     }
   ],
   "hazards": [
-    {"id": "H-CAN-01", "hazard": "Malformed frame accepted and transmitted", "severity": "S2", "exposure": "E3", "controllability": "C2", "asil": "ASIL-B"},
-    {"id": "H-CAN-02", "hazard": "Safety-critical payload corrupted without detection", "severity": "S3", "exposure": "E2", "controllability": "C2", "asil": "ASIL-B"},
-    {"id": "H-CAN-03", "hazard": "Frame replay attack accepted as authentic", "severity": "S3", "exposure": "E2", "controllability": "C2", "asil": "ASIL-B"},
-    {"id": "H-CAN-04", "hazard": "Subscriber channel overflow causing silent frame loss", "severity": "S1", "exposure": "E4", "controllability": "C3", "asil": "QM"},
-    {"id": "H-CAN-05", "hazard": "Application blocked indefinitely on ISO-TP timeout", "severity": "S2", "exposure": "E2", "controllability": "C1", "asil": "ASIL-A"}
+    {"id": "H-CAN-01", "hazard": "Malformed frame accepted and transmitted", "severity": "S2", "exposure": "E3", "controllability": "C2", "asil": "ASIL-A"},
+    {"id": "H-CAN-02", "hazard": "Safety-critical payload corrupted without detection", "severity": "S3", "exposure": "E2", "controllability": "C2", "asil": "ASIL-A"},
+    {"id": "H-CAN-03", "hazard": "Frame replay attack accepted as authentic", "severity": "S3", "exposure": "E2", "controllability": "C2", "asil": "ASIL-A"},
+    {"id": "H-CAN-04", "hazard": "Subscriber channel overflow causing silent frame loss", "severity": "S1", "exposure": "E4", "controllability": "C3", "asil": "ASIL-B"},
+    {"id": "H-CAN-05", "hazard": "Application blocked indefinitely on ISO-TP timeout", "severity": "S2", "exposure": "E2", "controllability": "C1", "asil": "QM"}
   ],
   "requirements": [
     {"id": "REQ-CAN-004", "impl": "src/frame.rs", "test": "test validate_frame_*", "status": "covered"},

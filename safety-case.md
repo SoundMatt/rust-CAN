@@ -20,11 +20,18 @@
 
 | Hazard ID | Hazard | Severity | Exposure | Controllability | ASIL |
 |---|---|---|---|---|---|
-| H-CAN-01 | Malformed frame accepted and transmitted | S2 | E3 | C2 | ASIL-B |
-| H-CAN-02 | Safety-critical payload corrupted without detection | S3 | E2 | C2 | ASIL-B |
-| H-CAN-03 | Frame replay attack accepted as authentic | S3 | E2 | C2 | ASIL-B |
-| H-CAN-04 | Subscriber channel overflow causing silent frame loss | S1 | E4 | C3 | QM |
-| H-CAN-05 | Application blocked indefinitely on ISO-TP timeout | S2 | E2 | C1 | ASIL-A |
+| H-CAN-01 | Malformed frame accepted and transmitted | S2 | E3 | C2 | ASIL-A |
+| H-CAN-02 | Safety-critical payload corrupted without detection | S3 | E2 | C2 | ASIL-A |
+| H-CAN-03 | Frame replay attack accepted as authentic | S3 | E2 | C2 | ASIL-A |
+| H-CAN-04 | Subscriber channel overflow causing silent frame loss | S1 | E4 | C3 | ASIL-B |
+| H-CAN-05 | Application blocked indefinitely on ISO-TP timeout | S2 | E2 | C1 | QM |
+
+> ASIL values are derived directly from ISO 26262-3:2018 Table 4 for each
+> S/E/C triple (anchor S3/E4/C3 = ASIL-D; each single-step reduction in any
+> parameter lowers the ASIL by one level: D→C→B→A→QM). In particular
+> H-CAN-04 (S1/E4/C3) is **ASIL-B**, not QM — subscriber-channel overflow
+> causing silent frame loss remains in safety scope. H-CAN-05 (S2/E2/C1)
+> resolves to QM.
 
 ---
 

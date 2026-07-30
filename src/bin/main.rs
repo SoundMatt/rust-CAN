@@ -528,15 +528,16 @@ fn cmd_convert(protocol: String, _format: OutputFormat) -> Result<i32, Box<dyn s
     // Frame derives Deserialize — parse stdin directly.
     let frame: Frame = match serde_json::from_reader(std::io::stdin().lock()) {
         Ok(f) => f,
-        Err(e) => {
-            eprintln!("{}", e);
+        Err(_) => {
+            // Emit only the canonical sentinel; the raw serde detail is an
+            // internal serializer artifact and is not part of the tool's
+            // contract surface (spec §11.2).
             eprintln!("INVALID_ARGUMENT");
             return Ok(1);
         }
     };
 
-    if let Err(e) = rust_can::validate_frame(&frame) {
-        eprintln!("{}", e);
+    if let Err(_e) = rust_can::validate_frame(&frame) {
         eprintln!("INVALID_ARGUMENT");
         return Ok(1);
     }

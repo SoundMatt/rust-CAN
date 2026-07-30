@@ -226,6 +226,15 @@ impl Bus for SocketCanBus {
 
         crate::validate_frame(&frame)?;
 
+        if frame.xl {
+            // The SocketCAN classic/FD transport cannot carry CAN XL frames
+            // (SDT/VCID/AF/SEC and >64-byte payloads). Reject rather than
+            // silently truncating to a classic 8-byte frame.
+            return Err(Error::Other(
+                "socketcan: CAN XL frames are not supported on this transport".into(),
+            ));
+        }
+
         if frame.fd {
             send_fd_frame(self.fd, &frame)
         } else {

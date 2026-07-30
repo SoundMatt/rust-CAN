@@ -116,7 +116,7 @@ jobs:
           key: ubuntu-cargo-safety-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Install rsfusa
-        run: cargo install --git https://github.com/SoundMatt/rust-FuSa --tag v0.3.14 rsfusa --locked
+        run: cargo install --git https://github.com/SoundMatt/rust-FuSa --tag v0.3.17 rsfusa --locked
 
       - name: Build release binary (needed for qualify)
         run: cargo build --release --locked
@@ -125,19 +125,18 @@ jobs:
         run: cargo test --locked
 
       - name: Capture test evidence with rsfusa
-        # Deliberately not gating: rsfusa v0.3.14's `verify` shells out to
-        # `cargo test -- --test-output=immediate`, and `--test-output` is not
-        # a real cargo/libtest flag (it's a cargo-nextest option) — every
-        # test binary rejects it, `cargo test` exits 101, and rsfusa reports
-        # a nonsensical "0 failed, 0 passed" despite the real, passing
-        # `cargo test` run in the step just above. This is an upstream
-        # rust-FuSa bug this repo cannot fix from its own config (filed:
-        # SoundMatt/rust-FuSa#46) — gating on it would make this job
-        # permanently red for a reason outside this repo's control, so it
-        # stays advisory. The mismatch is now surfaced loudly instead of
-        # silently discarded: if rsfusa ever reports 0 tests despite the
-        # real suite passing, that's this exact upstream bug, not a real
-        # regression here.
+        # Historical note: rsfusa v0.3.14's `verify` shelled out to
+        # `cargo test -- --test-output=immediate`, an invalid libtest flag
+        # (it's a cargo-nextest-only option) — every test binary rejected
+        # it, `cargo test` exited 101, and rsfusa reported a nonsensical
+        # "0 failed, 0 passed" despite the real, passing `cargo test` run in
+        # the step just above (filed: SoundMatt/rust-FuSa#46). That bug was
+        # fixed upstream in rust-FuSa v0.3.15 (this job now installs
+        # v0.3.17) — `verify` correctly reports real pass/fail counts again,
+        # confirmed locally against this tree. Left as advisory rather than
+        # converted to a gating step: promoting it to a gate is a separate
+        # decision from a tool-version bump. The 0-passed guard below is
+        # kept as a tripwire in case this or a similar bug ever recurs.
         run: |
           rsfusa verify --dir . || true
           if [ -f .fusa-evidence.json ]; then

@@ -9,7 +9,7 @@
 //!
 //! ```text
 //! Bits 28–26  Priority (3 bits)
-//! Bit  25     Reserved
+//! Bit  25     Extended Data Page (EDP)
 //! Bit  24     Data Page (DP)
 //! Bits 23–16  PDU Format (PF, 8 bits)
 //! Bits 15–8   PDU Specific (PS, 8 bits) — destination if PF<240, group ext if PF≥240
@@ -107,14 +107,17 @@ pub fn decode_id(id: u32) -> (Priority, Pgn, u8) {
     let src = (id & 0xFF) as u8;
     let pf = ((id >> 16) & 0xFF) as u8;
     let ps = ((id >> 8) & 0xFF) as u8;
+    // Data Page (DP) is ID bit 24 → PGN bit 16; Extended Data Page (EDP) is
+    // ID bit 25 → PGN bit 17.
     let dp = ((id >> 24) & 0x01) as u8;
+    let edp = ((id >> 25) & 0x01) as u8;
 
     let pgn = if pf < 240 {
         // Peer-to-peer: PS is destination, not part of PGN.
-        Pgn((dp as u32) << 17 | (pf as u32) << 8)
+        Pgn((edp as u32) << 17 | (dp as u32) << 16 | (pf as u32) << 8)
     } else {
         // Broadcast: PS is group extension, is part of PGN.
-        Pgn((dp as u32) << 17 | (pf as u32) << 8 | ps as u32)
+        Pgn((edp as u32) << 17 | (dp as u32) << 16 | (pf as u32) << 8 | ps as u32)
     };
 
     (priority, pgn, src)
@@ -125,10 +128,13 @@ pub fn decode_id(id: u32) -> (Priority, Pgn, u8) {
 pub fn encode_id(priority: Priority, pgn: Pgn, src: u8, dst: u8) -> u32 {
     let pf = ((pgn.0 >> 8) & 0xFF) as u8;
     let ps = (pgn.0 & 0xFF) as u8;
-    let dp = ((pgn.0 >> 17) & 0x01) as u8;
+    // PGN bit 16 → DP (ID bit 24); PGN bit 17 → EDP (ID bit 25).
+    let dp = ((pgn.0 >> 16) & 0x01) as u8;
+    let edp = ((pgn.0 >> 17) & 0x01) as u8;
 
     let mut id: u32 = 0;
     id |= (priority.value() as u32) << 26;
+    id |= (edp as u32) << 25;
     id |= (dp as u32) << 24;
     id |= (pf as u32) << 16;
     if pf >= 240 {
@@ -322,6 +328,37 @@ mod tests {
         assert_eq!(src2, src);
         // dst is in PS field
         assert_eq!(((id >> 8) & 0xFF) as u8, dst);
+    }
+
+    // Golden Data-Page vectors, decoded independently of `encode_id`, to
+    // pin the DP bit at PGN bit 16 (ID bit 24) and EDP at PGN bit 17
+    // (ID bit 25) per SAE J1939-21.
+    #[test]
+    fn decode_data_page_bit_is_16() {
+        // DP=1 broadcast: Priority=6, EDP=0, DP=1, PF=0xF0, PS=0x0A, SA=0x01.
+        let id: u32 = (6 << 26) | (1 << 24) | (0xF0 << 16) | (0x0A << 8) | 0x01;
+        let (_p, pgn, _src) = decode_id(id);
+        // PGN must be 0x1F00A (DP contributes 0x10000), not 0x2F00A.
+        assert_eq!(pgn.0, 0x1_F00A);
+    }
+
+    #[test]
+    fn decode_extended_data_page_bit_is_17() {
+        // EDP=1 broadcast: Priority=6, EDP=1, DP=0, PF=0xF0, PS=0x0A, SA=0x01.
+        let id: u32 = (6 << 26) | (1 << 25) | (0xF0 << 16) | (0x0A << 8) | 0x01;
+        let (_p, pgn, _src) = decode_id(id);
+        assert_eq!(pgn.0, 0x2_F00A);
+    }
+
+    #[test]
+    fn encode_decode_roundtrip_data_page() {
+        // DP=1 PGN must survive a full encode/decode round-trip.
+        let pgn = Pgn(0x1_F00A);
+        let id = encode_id(Priority(6), pgn, 0x01, BROADCAST_ADDR);
+        // DP is ID bit 24.
+        assert_eq!((id >> 24) & 0x01, 1);
+        let (_p, pgn2, _src) = decode_id(id);
+        assert_eq!(pgn2, pgn);
     }
 
     //fusa:test REQ-J1939-005

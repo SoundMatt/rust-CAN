@@ -329,23 +329,18 @@ jobs:
         run: cargo build --release --bin rust-can --locked
 
       - name: Install relay
-        run: go install github.com/SoundMatt/RELAY/cmd/relay@v1.10.0
+        run: go install github.com/SoundMatt/RELAY/v2/cmd/relay@v2.0.4
 
       - name: RELAY conformance (strict)
         run: relay conform --strict ./target/release/rust-can
 
       - name: RELAY interop (CAN golden vectors — must be EQUIVALENT)
-        run: |
-          # Capture output without propagating exit code — relay interop exits
-          # non-zero when any vector is non-EQUIVALENT, but we gate only on
-          # CAN-protocol vectors (rust-CAN is CAN-only; DDS/LIN/MQTT/RCP/
-          # SOMEIP vectors correctly exit 2 as unsupported).
-          interop_out=$(relay interop ./target/release/rust-can 2>&1) || true
-          echo "$interop_out"
-          if echo "$interop_out" | grep -A2 "(CAN)" | grep -qE "ERROR|FAIL"; then
-            echo "FAIL: one or more CAN golden vectors not EQUIVALENT"
-            exit 1
-          fi
+        # relay v2.0.4 supports --protocol to filter golden vectors, so we no
+        # longer need to grep the text report for the "(CAN)" section
+        # ourselves — --protocol CAN --strict gates on exactly the CAN
+        # vectors (rust-CAN is CAN-only; DDS/LIN/MQTT/RCP/SOMEIP vectors are
+        # correctly excluded rather than exiting 2 as unsupported).
+        run: relay interop --strict --protocol CAN ./target/release/rust-can
 
   # ── CAN interop testing (ROADMAP.md "Interop testing") ─────────────────────
   can-interop:

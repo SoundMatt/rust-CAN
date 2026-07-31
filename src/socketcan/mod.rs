@@ -284,7 +284,13 @@ impl Bus for SocketCanBus {
 // Frame read/write helpers
 // ---------------------------------------------------------------------------
 
-fn send_classic_frame(fd: RawFd, frame: &Frame) -> Result<(), Error> {
+/// Builds the raw kernel `CanFrame` for `frame`, without touching any fd.
+///
+/// Split out from `send_classic_frame` so the DLC/data derivation — in
+/// particular that an RTR frame's requested length (`frame.data.len()`,
+/// per the `Frame::rtr` doc contract) is preserved as `can_dlc` rather
+/// than dropped — is unit-testable without a real SocketCAN socket.
+fn to_raw_classic_frame(frame: &Frame) -> CanFrame {
     let mut raw = CanFrame {
         can_id: build_can_id(frame),
         can_dlc: frame.data.len() as u8,
@@ -295,6 +301,11 @@ fn send_classic_frame(fd: RawFd, frame: &Frame) -> Result<(), Error> {
     };
     let copy_len = frame.data.len().min(8);
     raw.data[..copy_len].copy_from_slice(&frame.data[..copy_len]);
+    raw
+}
+
+fn send_classic_frame(fd: RawFd, frame: &Frame) -> Result<(), Error> {
+    let raw = to_raw_classic_frame(frame);
 
     //fusa:unsafe SAFETY: write(2) to a valid SocketCAN fd with a properly sized CanFrame buffer
     let ret = unsafe {
@@ -562,5 +573,54 @@ fn get_iface_index(fd: RawFd, name: &str) -> Result<libc::c_int, Error> {
     Ok(unsafe { req.ifr_ifru.ifru_ifindex })
 }
 
-// No unit tests for SocketCAN here since they require a real Linux SocketCAN
-// interface. See tests/socketcan_test.rs (requires vcan0 to be set up).
+// No fd/socket-level unit tests for SocketCAN here since they require a
+// real Linux SocketCAN interface. See tests/socketcan_test.rs (requires
+// vcan0 to be set up). Pure frame<->raw translation logic that needs no
+// socket is covered below.
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A classic RTR frame's requested length (conveyed via `data.len()`,
+    /// per the `Frame::rtr` doc contract) must be preserved as `can_dlc`
+    /// on the wire, not dropped to zero. Regression test for the "RTR
+    /// frame drops the requested DLC" finding.
+    //fusa:test REQ-CAN-012
+    #[test]
+    fn rtr_frame_preserves_requested_dlc_in_raw_frame() {
+        for len in 0..=8usize {
+            let frame = Frame::remote_request(0x123, false, len);
+            let raw = to_raw_classic_frame(&frame);
+            assert_eq!(
+                raw.can_dlc, len as u8,
+                "RTR request for {len} bytes must set can_dlc={len}, got {}",
+                raw.can_dlc
+            );
+            assert_eq!(raw.can_id & CAN_RTR_FLAG, CAN_RTR_FLAG);
+        }
+    }
+
+    /// A non-RTR classic frame's `can_dlc` still derives from `data.len()`
+    /// as before — the RTR fix must not change ordinary data-frame framing.
+    #[test]
+    fn non_rtr_frame_dlc_matches_data_len() {
+        let frame = Frame {
+            id: 0x100,
+            data: vec![1, 2, 3, 4, 5],
+            ..Default::default()
+        };
+        let raw = to_raw_classic_frame(&frame);
+        assert_eq!(raw.can_dlc, 5);
+        assert_eq!(raw.can_id & CAN_RTR_FLAG, 0);
+        assert_eq!(&raw.data[..5], &[1, 2, 3, 4, 5]);
+    }
+
+    #[test]
+    fn build_can_id_sets_rtr_flag() {
+        let frame = Frame::remote_request(0x7E0, false, 3);
+        let id = build_can_id(&frame);
+        assert_eq!(id & CAN_RTR_FLAG, CAN_RTR_FLAG);
+        assert_eq!(id & CAN_SFF_MASK, 0x7E0);
+    }
+}

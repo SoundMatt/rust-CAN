@@ -7,7 +7,7 @@ The `Bus` trait is stable. Implementations are swappable without changing applic
 
 [![CI](https://github.com/SoundMatt/rust-CAN/actions/workflows/ci.yml/badge.svg)](https://github.com/SoundMatt/rust-CAN/actions/workflows/ci.yml)
 
-**RELAY spec:** v1.10 · **Safety:** ASIL-B (ISO 26262) · **Language:** Rust 2021
+**RELAY spec:** v2.0 · **Safety:** ASIL-B (ISO 26262) · **Language:** Rust 2021
 
 ---
 
@@ -23,7 +23,7 @@ The `Bus` trait is stable. Implementations are swappable without changing applic
 | `isotp` | ISO 15765-2 (ISO-TP) multi-frame transport | All |
 | `j1939` | SAE J1939 — 29-bit extended ID, PGN addressing | All |
 | `safety` | E2E protection — DataID, SourceID, SequenceCounter, CRC-16 | All |
-| `adapt` | RELAY v1.10 adapter — `Adapt()`, `ToMessage()`, `FromMessage()` | All |
+| `adapt` | RELAY v2.0 adapter — `Adapt()`, `ToMessage()`, `FromMessage()` | All |
 
 ---
 

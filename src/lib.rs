@@ -6,7 +6,7 @@
 //! rust-CAN — CAN bus library for Rust.
 //!
 //! Provides a virtual bus, SocketCAN (Linux), DBC parser, ISO-TP, J1939,
-//! CAN FD, and safety E2E protection. Conforms to RELAY spec v1.10.
+//! CAN FD, and safety E2E protection. Conforms to RELAY spec v2.0.
 //!
 //! # Quick start
 //!
@@ -63,16 +63,16 @@ pub use adapt::{adapt, from_message, to_message};
 pub use bus::{Bus, Drainer, FrameReceiver, HealthProvider, LoaningBus, MetricsProvider};
 pub use error::Error;
 pub use frame::{
-    max_data_len, validate_frame, Filter, Frame, LoanedFrame, CAN_FD_MAX_DATA_LEN,
-    CAN_MAX_DATA_LEN, CAN_MAX_EXT_ID, CAN_MAX_STD_ID, CAN_XL_MAX_DATA_LEN, CAN_XL_MAX_PRIO_ID,
-    CAN_XL_MIN_DATA_LEN,
+    is_canonical_fd_data_len, max_data_len, validate_frame, Filter, Frame, LoanedFrame,
+    CAN_FD_CANONICAL_DATA_LENS, CAN_FD_MAX_DATA_LEN, CAN_MAX_DATA_LEN, CAN_MAX_EXT_ID,
+    CAN_MAX_STD_ID, CAN_XL_MAX_DATA_LEN, CAN_XL_MAX_PRIO_ID, CAN_XL_MIN_DATA_LEN,
 };
 #[cfg(feature = "hmac-auth")]
 pub use safety::HmacSha256Auth;
 pub use safety::MessageAuthenticator;
 
 /// The RELAY spec version this implementation targets.
-pub const SPEC_VERSION: &str = "1.10";
+pub const SPEC_VERSION: &str = "2.0";
 
 /// Alias for `SPEC_VERSION` for explicitness in CLI contexts.
-pub const RELAY_SPEC_VERSION: &str = "1.10";
+pub const RELAY_SPEC_VERSION: &str = "2.0";

@@ -12,10 +12,10 @@
 - [x] J1939 — SAE J1939 PGN addressing over 29-bit extended IDs
 - [x] DBC parser — signal decode
 - [x] E2E safety — CRC-16/CCITT-FALSE, sequence counter
-- [x] RELAY v1.10 adapter — Adapt(), ToMessage(), FromMessage()
+- [x] RELAY v2.0 adapter — Adapt(), ToMessage(), FromMessage()
 - [x] CLI binary `rust-can` — version, capabilities, status, send, subscribe
 - [x] ASIL-B safety evidence — FMEA, TARA, safety case, rsfusa CI
-- [x] RELAY conformance — spec v1.10
+- [x] RELAY conformance — spec v2.0
 
 ## v0.2.0 — Robustness
 

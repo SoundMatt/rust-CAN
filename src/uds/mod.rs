@@ -246,7 +246,17 @@ impl Client {
         access_level: u8,
         key: &[u8],
     ) -> Result<(), Error> {
-        let level_key = access_level + 1;
+        // access_level is caller-supplied API input (not wire data), but an
+        // unchecked `+ 1` panics in debug builds and silently wraps to 0 in
+        // release builds when access_level == 0xFF — and 0xFF has no valid
+        // "send key" sub-function per ISO 14229-1 (the seed/key pair is
+        // level/level+1, which must fit in a u8). Reject it explicitly
+        // instead of risking either failure mode.
+        let level_key = access_level.checked_add(1).ok_or_else(|| {
+            Error::Other(
+                "uds: access_level 0xFF has no valid SecurityAccess key sub-function (level+1 overflows u8)".into(),
+            )
+        })?;
         let mut req = vec![SID_SECURITY_ACCESS, level_key];
         req.extend_from_slice(key);
         let resp = self.request(ctx, &req).await?;
@@ -449,6 +459,27 @@ mod tests {
         .await
         .unwrap();
         (client_conn, ecu_conn)
+    }
+
+    /// `access_level == 0xFF` has no valid SecurityAccess key sub-function
+    /// (level+1 would overflow u8). Must return an `Err`, not panic (debug
+    /// builds) or silently wrap to a bogus sub-function 0x00 (release
+    /// builds). Regression test for the unchecked `access_level + 1`.
+    //fusa:test REQ-UDS-006
+    #[tokio::test]
+    async fn security_access_send_key_rejects_max_access_level_instead_of_overflowing() {
+        let (client_conn, _ecu_conn) = client_and_ecu_conn().await;
+        let client = Client::new(client_conn);
+
+        // No ECU peer response is set up: a fix must reject 0xFF before
+        // ever sending a request, so this call must not hang or panic.
+        let result = client
+            .security_access_send_key(Context::background(), 0xFF, &[0xAA, 0xBB])
+            .await;
+        assert!(
+            result.is_err(),
+            "access_level 0xFF must be rejected, not overflow"
+        );
     }
 
     /// REQ-UDS-009: a UDS request/response round-trips through a real

@@ -21,6 +21,24 @@ pub const CAN_MAX_DATA_LEN: usize = 8;
 //fusa:req REQ-CAN-013
 pub const CAN_FD_MAX_DATA_LEN: usize = 64;
 
+/// Canonical CAN FD data lengths per the ISO 11898-1 DLC table.
+///
+/// DLC 0–8 map 1:1 to 0–8 data bytes; DLC 9–15 map to the fixed lengths
+/// 12, 16, 20, 24, 32, 48, 64. Any other byte count (e.g. 9, 10, 11, 13,
+/// 20-31 excluded values, ...) has no DLC encoding: a conformant CAN FD
+/// controller/driver (including Linux SocketCAN) silently rounds such a
+/// length up to the next canonical value and zero-pads on the wire, so a
+/// peer receives a different length than the sender specified.
+//fusa:req REQ-CAN-013
+pub const CAN_FD_CANONICAL_DATA_LENS: [usize; 16] =
+    [0, 1, 2, 3, 4, 5, 6, 7, 8, 12, 16, 20, 24, 32, 48, 64];
+
+/// Returns true if `len` is a canonical CAN FD data length (i.e. directly
+/// representable by a CAN FD DLC value per ISO 11898-1).
+pub fn is_canonical_fd_data_len(len: usize) -> bool {
+    CAN_FD_CANONICAL_DATA_LENS.contains(&len)
+}
+
 /// Minimum data length for a CAN XL frame.
 //fusa:req REQ-CAN-013
 pub const CAN_XL_MIN_DATA_LEN: usize = 1;
@@ -73,6 +91,15 @@ pub struct Frame {
     pub ext: bool,
 
     /// Remote Transmission Request. Must be false for FD and XL frames.
+    ///
+    /// Per ISO 11898-1, an RTR frame carries no payload bytes on the wire,
+    /// but its DLC field still encodes the length of the data frame being
+    /// solicited. Transports in this crate derive the outgoing DLC from
+    /// `data.len()` even when `rtr` is set, so a caller requesting an
+    /// N-byte reply MUST set `data` to a `Vec` of length N (the byte
+    /// *values* are ignored and never placed on the wire) — see
+    /// [`Frame::remote_request`] for a convenience constructor. Leaving
+    /// `data` empty on an RTR frame requests a 0-byte reply.
     #[serde(default, skip_serializing_if = "is_false")]
     pub rtr: bool,
 
@@ -126,6 +153,26 @@ impl Frame {
             CAN_FD_MAX_DATA_LEN
         } else {
             CAN_MAX_DATA_LEN
+        }
+    }
+
+    /// Builds a classic CAN Remote Transmission Request (RTR) frame that
+    /// solicits a `requested_len`-byte reply.
+    ///
+    /// Per ISO 11898-1, an RTR frame carries no payload on the wire, but
+    /// its DLC field still conveys the requested data length. This crate's
+    /// transports derive the outgoing DLC from `data.len()`, so this
+    /// constructor fills `data` with `requested_len` placeholder zero
+    /// bytes — their *values* are never transmitted, only the length.
+    /// `requested_len` MUST be ≤ [`CAN_MAX_DATA_LEN`] (8); RTR is not valid
+    /// on CAN FD or CAN XL frames.
+    pub fn remote_request(id: u32, ext: bool, requested_len: usize) -> Frame {
+        Frame {
+            id,
+            ext,
+            rtr: true,
+            data: vec![0u8; requested_len.min(CAN_MAX_DATA_LEN)],
+            ..Default::default()
         }
     }
 }
@@ -290,6 +337,20 @@ pub fn validate_frame(f: &Frame) -> Result<(), Error> {
                 f.data.len()
             )));
         }
+        // ISO 11898-1: CAN FD DLC values only encode the lengths in
+        // CAN_FD_CANONICAL_DATA_LENS. A non-canonical length (e.g. 20's
+        // neighbor 21) is not representable on the wire; conformant
+        // hardware/kernel stacks (including Linux SocketCAN) silently
+        // round it up and zero-pad, so the receiver sees a different
+        // length than the sender specified. Reject it here rather than
+        // let it reach the transport layer.
+        if !is_canonical_fd_data_len(f.data.len()) {
+            return Err(Error::invalid_frame(format!(
+                "CAN FD data length {} is not a canonical DLC length \
+                 (must be one of 0-8, 12, 16, 20, 24, 32, 48, 64)",
+                f.data.len()
+            )));
+        }
     } else if f.data.len() > CAN_MAX_DATA_LEN {
         return Err(Error::invalid_frame(format!(
             "classic CAN data length {} exceeds 8",
@@ -350,6 +411,50 @@ mod tests {
             ..Default::default()
         };
         assert!(validate_frame(&f).is_ok());
+    }
+
+    /// ISO 11898-1: every canonical CAN FD DLC length (0-8, 12, 16, 20, 24,
+    /// 32, 48, 64) must validate successfully.
+    //fusa:test REQ-CAN-013
+    #[test]
+    fn fd_frame_all_canonical_lengths_accepted() {
+        for &len in CAN_FD_CANONICAL_DATA_LENS.iter() {
+            let f = Frame {
+                id: 0x100,
+                fd: true,
+                data: vec![0u8; len],
+                ..Default::default()
+            };
+            assert!(
+                validate_frame(&f).is_ok(),
+                "canonical FD length {len} should validate"
+            );
+        }
+    }
+
+    /// Non-canonical CAN FD lengths (e.g. 20's neighbors 9-11, 13-15, 17-19,
+    /// 21-23, ...) have no DLC encoding in ISO 11898-1. A conformant
+    /// SocketCAN driver silently rounds these up and zero-pads on the wire,
+    /// so the receiver sees a different length than the sender specified —
+    /// this must be rejected by `validate_frame` rather than reach the
+    /// transport layer. Regression test for the missing canonicality check.
+    //fusa:test REQ-CAN-013
+    #[test]
+    fn fd_frame_non_canonical_lengths_rejected() {
+        for len in [
+            9usize, 10, 11, 13, 14, 15, 17, 18, 19, 21, 25, 33, 47, 49, 63,
+        ] {
+            let f = Frame {
+                id: 0x100,
+                fd: true,
+                data: vec![0u8; len],
+                ..Default::default()
+            };
+            assert!(
+                matches!(validate_frame(&f), Err(Error::InvalidFrame { .. })),
+                "non-canonical FD length {len} should be rejected"
+            );
+        }
     }
 
     #[test]
@@ -413,6 +518,39 @@ mod tests {
             validate_frame(&f),
             Err(Error::InvalidFrame { .. })
         ));
+    }
+
+    /// `Frame::remote_request` must produce an RTR frame whose `data.len()`
+    /// (the value transports use to derive the outgoing DLC) equals the
+    /// requested length — this is the signal that a classic RTR send must
+    /// not drop. Regression test for the "RTR frame drops the requested
+    /// DLC" finding: prior to documenting/constructing this correctly, the
+    /// natural (but wrong) way to build an RTR frame left `data` empty,
+    /// forcing DLC=0 regardless of the length the caller intended to
+    /// solicit.
+    //fusa:test REQ-CAN-012
+    #[test]
+    fn remote_request_preserves_requested_dlc() {
+        for len in 0..=8usize {
+            let f = Frame::remote_request(0x123, false, len);
+            assert!(f.rtr);
+            assert!(!f.fd);
+            assert_eq!(
+                f.data.len(),
+                len,
+                "remote_request({len}) must preserve the requested DLC in data.len()"
+            );
+            assert!(validate_frame(&f).is_ok());
+        }
+    }
+
+    /// A caller-supplied `requested_len` above the classic CAN max (8) must
+    /// be clamped, not overflow into an invalid frame.
+    #[test]
+    fn remote_request_clamps_oversized_length() {
+        let f = Frame::remote_request(0x123, false, 20);
+        assert_eq!(f.data.len(), CAN_MAX_DATA_LEN);
+        assert!(validate_frame(&f).is_ok());
     }
 
     #[test]

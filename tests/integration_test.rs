@@ -460,8 +460,8 @@ async fn isotp_single_frame_roundtrip() {
 //fusa:test REQ-CAN-001
 #[test]
 fn spec_version_constant() {
-    assert_eq!(rust_can::SPEC_VERSION, "1.10");
-    assert_eq!(rust_can::RELAY_SPEC_VERSION, "1.10");
+    assert_eq!(rust_can::SPEC_VERSION, "2.0");
+    assert_eq!(rust_can::RELAY_SPEC_VERSION, "2.0");
 }
 
 // ---------------------------------------------------------------------------

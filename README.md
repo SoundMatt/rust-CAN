@@ -22,6 +22,9 @@ The `Bus` trait is stable. Implementations are swappable without changing applic
 | `dbc` | DBC file parser and signal decoder | All |
 | `isotp` | ISO 15765-2 (ISO-TP) multi-frame transport | All |
 | `j1939` | SAE J1939 — 29-bit extended ID, PGN addressing | All |
+| `obdii` | OBD-II (ISO 15031 / SAE J1979) on-board diagnostics over ISO-TP | All |
+| `uds` | UDS (ISO 14229) diagnostic services client over ISO-TP | All |
+| `recorder` | Candump-compatible CAN frame recording and replay | All |
 | `safety` | E2E protection — DataID, SourceID, SequenceCounter, CRC-16 | All |
 | `adapt` | RELAY v2.0 adapter — `Adapt()`, `ToMessage()`, `FromMessage()` | All |
 
